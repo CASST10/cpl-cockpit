@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CPL Cockpit ✈️</title>
-<!-- CPL Cockpit v44 -->
+<!-- CPL Cockpit v45 -->
 <style>
   :root {
     --bg: #0F1117; --bg2: #1A1D27; --bg3: #22263A;
@@ -501,10 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v45</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v45</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2279,6 +2280,32 @@ async function saveSyncSetup(){
   pomoPoll(true);
 }
 
+// v45: Versionsanzeige & Update-Hinweis
+const APP_VERSION=45;
+function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
+async function checkForUpdate(){
+  if(!/^https?:/.test(location.protocol)) return;
+  try{
+    const t=await (await fetch('sw.js?t='+Date.now(),{cache:'no-store'})).text();
+    const v=_verNum(t);
+    if(v>APP_VERSION) showUpdateBanner(v);
+  }catch(e){}
+}
+function showUpdateBanner(v){
+  if(document.getElementById('upd-banner')) return;
+  const b=document.createElement('div'); b.id='upd-banner';
+  b.style.cssText='position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:10040;background:var(--blue,#3b82f6);color:#fff;padding:10px 14px;border-radius:12px;font-size:14px;display:flex;gap:10px;align-items:center;box-shadow:0 8px 30px rgba(0,0,0,.5)';
+  b.innerHTML=`🚀 Neue Version v${v} ist da <button onclick="forceUpdate()" style="background:#fff;color:#1d4ed8;border:0;border-radius:8px;padding:6px 12px;font-weight:600">Jetzt laden</button>`;
+  document.body.appendChild(b);
+}
+async function forceUpdate(){
+  try{ if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
+  try{ if(navigator.serviceWorker){ const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.unregister())); } }catch(e){}
+  location.reload();
+}
+setTimeout(checkForUpdate,3000);
+setInterval(checkForUpdate,30*60*1000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkForUpdate(); });
 // v44: Handy-Menü (☰) — oben rechts war die Leiste auf dem Handy ausgeblendet
 function toggleMobMenu(e){
   if(e) e.stopPropagation();
@@ -7124,7 +7151,7 @@ function calDayClick(ds){
 // ── PWA SERVICE WORKER ────────────────────────────────────────────
 if('serviceWorker' in navigator && /^https?:/.test(location.protocol)){
   // v39: echter Service Worker (sw.js) → App funktioniert offline & ist installierbar
-  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).catch(()=>{}));
 }
 
 // ── PWA Install Prompt ────────────────────────────────────────────
