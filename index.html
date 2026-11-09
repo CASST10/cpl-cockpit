@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CPL Cockpit ✈️</title>
-<!-- CPL Cockpit v45 -->
+<!-- CPL Cockpit v46 -->
 <style>
   :root {
     --bg: #0F1117; --bg2: #1A1D27; --bg3: #22263A;
@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v45</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v46</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v45</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v46</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2281,7 +2281,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=45;
+const APP_VERSION=46;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -2337,6 +2337,26 @@ function updateSyncUI(){
 // ════════════════════════════════════════════════════════════════
 function _tomb(id){ if(id==null) return; if(!S._delIds) S._delIds=[]; if(!S._delIds.includes(id)) S._delIds.push(id); if(S._delIds.length>800) S._delIds=S._delIds.slice(-800); }
 function _chkMark(id,v){ if(!S._chk) S._chk={}; S._chk[id]={v,t:Date.now()}; }
+// v46: Abschlussdatum mit Zeitstempel → beim Sync gewinnt die NEUESTE Änderung
+// (vorher gewann das älteste Datum, und Daten im Format TT.MM.JJJJ galten immer als "älter")
+function _setDoneDate(id,key){
+  if(!S.stageDoneDates) S.stageDoneDates={};
+  if(!S._sdd) S._sdd={};
+  S._sdd[id]={v:key||null,t:Date.now()};
+  if(key) S.stageDoneDates[id]=key; else delete S.stageDoneDates[id];
+}
+// Reparatur: Stage wurde kürzlich (wieder) abgehakt, aber ein altes Datum blieb hängen
+function _repairDoneDates(st){
+  st=st||S; if(!st) return;
+  const sdd=st.stageDoneDates||(st.stageDoneDates={});
+  Object.keys(sdd).forEach(id=>{ const k=_dsToKey(sdd[id]); if(k) sdd[id]=k; });
+  const chk=st._chk||{}, track=st._sdd||{};
+  Object.entries(chk).forEach(([id,c])=>{
+    if(!c||!c.v||!c.t||track[id]||!(st.checked||{})[id]) return;
+    const ck=_keyOf(new Date(c.t)), cur=_dsToKey(sdd[id]);
+    if(!cur || (cur<ck && Date.now()-c.t<14*864e5)) sdd[id]=ck;
+  });
+}
 function _keyToDs(k){ const [y,m,d]=k.split('-'); return d+'.'+m+'.'+y; }
 function _blkKey(b){ return b.id!=null?'i'+b.id:'k'+(b.date||'')+'|'+(b.ts||'')+'|'+(b.label||'')+'|'+(b.mins||''); }
 function _allBlocksOf(st){
@@ -2400,9 +2420,14 @@ function mergeStates(local, remote){
   const checked=Object.assign({},sec.checked||{},prim.checked||{});
   Object.entries(chk).forEach(([id,x])=>{ if(x.v) checked[id]=true; else delete checked[id]; });
   M.checked=checked;
-  const sdd=Object.assign({},sec.stageDoneDates||{});
-  Object.entries(prim.stageDoneDates||{}).forEach(([id,v])=>{ if(!sdd[id]||v<sdd[id]) sdd[id]=v; });
+  const sdd={};
+  [sec.stageDoneDates||{},prim.stageDoneDates||{}].forEach(o=>Object.entries(o).forEach(([id,v])=>{ const k=_dsToKey(v); if(k&&(!sdd[id]||k<sdd[id])) sdd[id]=k; }));
+  const trk=Object.assign({},sec._sdd||{});
+  Object.entries(prim._sdd||{}).forEach(([id,x])=>{ if(!trk[id]||x.t>=trk[id].t) trk[id]=x; });
+  Object.entries(trk).forEach(([id,x])=>{ if(x.v) sdd[id]=x.v; else delete sdd[id]; });
+  M._sdd=trk;
   M.stageDoneDates=sdd;
+  _repairDoneDates(M);
   const rd={};
   [sec.repDates||{},prim.repDates||{}].forEach(o=>Object.entries(o).forEach(([id,x])=>{ rd[id]=Object.assign({},rd[id]||{},x); }));
   M.repDates=rd;
@@ -2586,8 +2611,7 @@ function saveAddSession(){
   if(note){ if(!S.log)S.log=[]; S.log.unshift({ts:blk.ts||'',dt:ds,sid,mode:type,txt:'(nachgetragen) '+note,pb:1}); }
   if(type==='pomo'&&sid&&document.getElementById('as-done').checked&&!isDone(sid)){
     S.checked[sid]=true; _chkMark(sid,true);
-    if(!S.stageDoneDates)S.stageDoneDates={};
-    S.stageDoneDates[sid]=dv;
+    _setDoneDate(sid,_dsToKey(dv)||dv);
   }
   recalcAllHours(); saveState();
   document.getElementById('add-sess-modal').remove();
@@ -2871,6 +2895,20 @@ function toggleWorkflowStep(stageId, step){
   if(!S.wfDates) S.wfDates={};
   if(S.stageWorkflow[stageId][step]) S.wfDates[stageId+'|'+step]=_keyOf(new Date()); else delete S.wfDates[stageId+'|'+step];
   saveState(); render();
+  const wf=S.stageWorkflow[stageId];
+  if(WORKFLOW_STEPS.every(x=>wf[x.k])&&!isDone(stageId)) setTimeout(()=>offerStageDone(stageId),120);
+}
+// v46: Ablauf komplett → Stage abschliessen anbieten (zählt dann bei "Heute geleistet")
+function offerStageDone(id){
+  document.getElementById('offer-done-modal')?.remove();
+  const st=ALL99.find(x=>x.id===id);
+  const ov=document.createElement('div'); ov.className='modal-overlay'; ov.id='offer-done-modal';
+  ov.innerHTML=`<div class="modal-box" style="max-width:380px">
+    <div class="modal-title">🎉 Ablauf komplett</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Alle Schritte von <b>#${id} ${st?st.t:''}</b> sind erledigt. Stage jetzt als <b>fertig</b> markieren?</div>
+    <div style="display:flex;gap:8px"><button class="primary" style="flex:1" onclick="document.getElementById('offer-done-modal').remove();toggleStage(${id})">✓ Stage fertig</button>
+    <button onclick="document.getElementById('offer-done-modal').remove()">Noch nicht</button></div></div>`;
+  document.body.appendChild(ov);
 }
 function workflowBoxHTML(stageId){
   const wf=(S.stageWorkflow||{})[stageId]||{};
@@ -5635,14 +5673,11 @@ const _baseToggle=toggleStage;
 function toggleStage(id){
   const was=isDone(id);
   if(DONE_DEF.has(id))return;
-  if(S.checked[id]){ delete S.checked[id]; _chkMark(id,false); }
+  if(S.checked[id]){ delete S.checked[id]; _chkMark(id,false); _setDoneDate(id,null); }
   else{
     S.checked[id]=true; _chkMark(id,true);
     if(!S.hours[id])S.hours[id]=0;
-    if(!was){
-      if(!S.stageDoneDates)S.stageDoneDates={};
-      S.stageDoneDates[id]=_keyOf(new Date());
-    }
+    if(!was) _setDoneDate(id,_keyOf(new Date()));
   }
   saveState(); render();
   if(!was&&isDone(id)&&!stageTests(id,'sap').length) setTimeout(()=>showTestScore(id,'sap',{fromDone:true}),150);
@@ -7302,7 +7337,7 @@ function exportPDFReport(){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-loadState().then(()=>{ pomoRestoreLocal(); pomoPoll(true); if(_setupFromLink){ _toast('✓ Sync verbunden — dieses Gerät heisst „'+devName()+'“'); if(_isIOS()&&!_isStandalone()) setTimeout(showIOSInstallHint,900); } else if(!gistOK()&&!_lsGet('cpl_sync_skip')) setTimeout(showSyncSetup,600); });
+loadState().then(()=>{ try{ _repairDoneDates(); }catch(e){} try{ render(); }catch(e){} pomoRestoreLocal(); pomoPoll(true); if(_setupFromLink){ _toast('✓ Sync verbunden — dieses Gerät heisst „'+devName()+'“'); if(_isIOS()&&!_isStandalone()) setTimeout(showIOSInstallHint,900); } else if(!gistOK()&&!_lsGet('cpl_sync_skip')) setTimeout(showSyncSetup,600); });
 // Init todo badge after load
 setTimeout(()=>{
   const open=(S.todos||[]).filter(t=>!t.done).length;
