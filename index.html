@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CPL Cockpit ✈️</title>
-<!-- CPL Cockpit v46 -->
+<!-- CPL Cockpit v47 -->
 <style>
   :root {
     --bg: #0F1117; --bg2: #1A1D27; --bg3: #22263A;
@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v46</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v47</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v46</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v47</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2281,7 +2281,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=46;
+const APP_VERSION=47;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -3102,8 +3102,8 @@ function addLog(txt){
 // Blöcke; die anderen zeigen nur an. Bedienst du den Timer woanders, übernimmt dieses Gerät.
 // ════════════════════════════════════════════════════════════════
 let _pomoSig=null, _pomoApplying=false, _pomoPubTimer=null, _pomoLocalAt=0, _pomoRemoteAt=0, _pomoPubInFlight=false, _pomoPubAgain=false;
-const _POMO_KEYS=['run','phase','secs','block','total','mode','pomoMode','flow','workElapsed','flowElapsed','satt','xrep','sess','nlog','adj'];
-function _pomoSigNow(){ return JSON.stringify([P.run,P.phase,P.block,P.total,P.mode,P.pomoMode,P.flow,P.satt&&P.satt.repId,P.xrep&&P.xrep.id,P.sess,P.nlog,P.adj]); }
+const _POMO_KEYS=['run','phase','secs','block','total','mode','pomoMode','flow','workElapsed','flowElapsed','satt','xrep','aq','sess','nlog','adj'];
+function _pomoSigNow(){ return JSON.stringify([P.run,P.phase,P.block,P.total,P.mode,P.pomoMode,P.flow,P.satt&&P.satt.repId,P.xrep&&P.xrep.id,P.aq&&(P.aq.id+P.aq.scope),P.sess,P.nlog,P.adj]); }
 function pomoSyncCheck(){
   const sig=_pomoSigNow();
   if(_pomoSig===null||_pomoApplying){ _pomoSig=sig; return; }
@@ -3153,7 +3153,7 @@ function pomoApply(snap,resume){
   try{
     if(P.tim){ clearInterval(P.tim); P.tim=null; }
     _POMO_KEYS.forEach(k=>{ P[k]=snap.P[k]; });
-    P.satt=snap.P.satt||null; P.xrep=snap.P.xrep||null;
+    P.satt=snap.P.satt||null; P.xrep=snap.P.xrep||null; P.aq=snap.P.aq||null;
     P.owner=snap.dev; P.ownerName=snap.devName||'anderes Gerät';
     if(snap.activeId&&(P.pomoMode||'stage')==='stage') S.activeId=snap.activeId;
     if(resume) _pomoLocalAt=snap.at;
@@ -3348,6 +3348,8 @@ function logPomoBlockNow(minsOverride, opts){
   const blk={id:_bid,date:todayStr(),stageId,label,mins,hours:Math.round(mins/60*100)/100,done:true,type,
     ts:new Date().toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'})};
   if(pm==='satt'&&P.satt){ blk.sattFrom=P.satt.fromId; }
+  const _aq=(pm==='stage'&&P.aq&&P.aq.id===stageId)?P.aq:null;
+  if(_aq){ blk.aq=_aq.scope; blk.topic='🎯 ATPL Q'; }
   if(!S.dayBlocks)S.dayBlocks=[];
   S.dayBlocks.unshift(blk);
   // Recalculate this stage's hours from all blocks
@@ -3361,6 +3363,7 @@ function logPomoBlockNow(minsOverride, opts){
   saveState();
 
   // Notiz: im Flow gesammelt, sonst sofort — immer nur EIN Popup pro Fokus-Abschnitt
+  if(_aq){ if(!(_bulkTick&&document.hidden)) setTimeout(()=>showAQScore(stageId,_aq.scope,mins,true,blk.id),200); return; }  // Score-Fenster statt Notiz-Popup
   if(!P.pendNote) P.pendNote=[];
   P.pendNote.push(blk.id);
   if(opts&&opts.deferNote) return;
@@ -4245,6 +4248,7 @@ function buildWkBlock(w,ws){
             <div class="mpbar" style="max-width:80px"><div class="mfill" style="width:${pct2}%;background:${sh>=STAGE_TARGET_H?'var(--green)':'var(--blue)'}"></div></div>
             <button style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="S.activeId=${s.id};S.tab='today';render()">☀ Heute</button>
             <button style="font-size:11px;padding:3px 8px" onclick="S.activeId=${s.id};S.tab='pomo';render()">⏱ Pomo</button>
+            <button style="font-size:11px;padding:3px 8px;background:#132a26;border-color:#1f5a4f;color:#2DD4BF" onclick="showStageAQ(${s.id})" title="ATPL Q zu diesem Stage (zählt als Lernzeit)">🎯 ATPL Q</button>
           </div>
           ${STAGE_EQUIPMENT[s.id]?`<div style="margin-top:6px">${STAGE_EQUIPMENT[s.id].map(e=>`<span class="equip-badge">${equipIcon(e)} ${e} mitnehmen!</span>`).join('')}</div>`:''}
           ${STAGE_REFS[s.id]?`<div class="stage-ref-box">
@@ -4480,6 +4484,8 @@ function renderPomo(){
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-weight:600;color:#2DD4BF;flex:1">${P.xrep.sched?'🔁 Repetition':P.xrep.how==='hz'?'🟦 Horizon-Kurzrep':'🧠 Festigen'}: #${P.xrep.id} ${_x?_x.t:''}</div>
       <button onclick="finishXrep()" style="font-size:11px;padding:3px 9px">✓ Fertig</button><button onclick="cancelXrep()" style="font-size:11px;padding:3px 9px">✕</button></div>
       ${P.xrep.how==='hz'?hzSelHTML(P.xrep.id):P.xrep.how==='free'?'<div style="font-size:12px;color:var(--text2)">Freies Wiederholen: Büchlein-Seite / Notizen durchgehen, aktiv aus dem Kopf erklären (Feynman), Lücken markieren.</div>':atplqSelHTML(P.xrep.id,(()=>{ if(!P.xrep.sched) return 'stage'; const rr=getRepStatus(P.xrep.id).find(q=>q.iv===P.xrep.iv)||{}; return rr.final?'final':rr.kind||'stage'; })())}</div>`; }
+  if(pm==='stage') h+=aqBannerHTML();
+  if(pm==='stage'&&S.activeId&&!(P.aq&&P.aq.id===S.activeId)) h+=`<div style="display:flex;justify-content:flex-end;margin:-4px 0 10px"><button onclick="showStageAQ(${S.activeId})" style="font-size:12px;padding:5px 12px;background:#132a26;border-color:#1f5a4f;color:#2DD4BF">🎯 ATPL Q in diesem Stage${isReviewStage(S.activeId)?' · Review':''}</button></div>`;
   if(pm==='stage'&&!P.run) h+=festigenHintHTML();
   if(pm==='satt'&&P.satt&&P.satt.repId){ const _x=ALL99.find(y=>y.id===P.satt.repId);
     h+=`<div style="background:#2a1530;border:1px solid #5b2a6b;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px">
@@ -5408,6 +5414,121 @@ function festigenHintHTML(){
         ${loKeys(st.id).length?`<button onclick="startMicroRep(${st.id})" style="font-size:11px;padding:3px 9px">⚡ Mikro-Rep</button>`:''}
       </div></div>`; }).join('');
 }
+// ════════════════════════════════════════════════════════════════
+// v47: 🎯 ATPL Q IM STAGE — ein Pomodoro-Block des aktuellen Stages wird als
+// ATPL-Q-Block gemacht. Zeit zählt zum Stage, Score geht ins Rep-Log (Fach-Ampel),
+// der Rep-Plan wird nicht verschoben. Ideal für Review-/Repe-Stages.
+// ════════════════════════════════════════════════════════════════
+function isReviewStage(id){
+  const d=(typeof STAGE_LOS!=='undefined'&&STAGE_LOS[id])||{};
+  const tp=((STAGE_REFS[id]||{}).topics||[]).join(' ');
+  return !!(d.r||isFinalStage(id)||/review|wiederhol|repetition/i.test(tp));
+}
+const AQ_SCOPES={stage:'Nur dieses Stage',prev:'Bisher im Fach (inkl. diesem Stage)',fach:'Ganzes Fach'};
+function aqDefaultScope(id){ const st=ALL99.find(x=>x.id===id); return isFinalStage(id)?'fach':isReviewStage(id)?'prev':'stage'; }
+function aqChapters(id,scope){
+  const st=ALL99.find(x=>x.id===id); if(!st) return [];
+  let ids=[id];
+  if(scope==='prev') ids=ALL99.filter(x=>x.f===st.f&&(isDone(x.id)||x.id===id||x.id<id)).map(x=>x.id);
+  if(scope==='fach') ids=ALL99.filter(x=>x.f===st.f).map(x=>x.id);
+  const chap={};
+  ids.forEach(i=>(ATPLQ_SEL[i]||[]).forEach(c=>{ if(c.c.startsWith('100')) return; if(!chap[c.c]) chap[c.c]={t:c.t,s:{}}; (c.s||[]).forEach(x=>{ chap[c.c].s[x.c]=x.t; }); }));
+  return Object.keys(chap).sort().map(c=>({c,t:chap[c].t,s:Object.keys(chap[c].s).sort().map(k=>({c:k,t:chap[c].s[k]}))}));
+}
+function aqGuideHTML(id,scope){
+  const st=ALL99.find(x=>x.id===id); if(!st) return '';
+  const ch=aqChapters(id,scope);
+  const head=`<div class="aq-head">📍 In ATPL Q anwählen</div><div class="aq-path">Datenbank <b>ATPL(A) 2020</b> → <b>${st.f} ${SUBJ_NAMES[st.f]||''}</b></div>`;
+  if(!ch.length) return `<div class="aq-box">${head}<div class="aq-path">→ Unterthemen zu #${st.id} ${loEsc(st.t)}</div></div>`;
+  const wide=scope!=='stage';
+  return `<div class="aq-box">${head}
+    ${ch.map(c=>wide?`<span class="aq-chip">☑ ${c.c.replace('.',' ')} ${loEsc(c.t)}</span>`:`<div class="aq-l2">☑ ${c.c.replace('.',' ')} — ${loEsc(c.t)}</div>${c.s.length?`<div class="aq-list">${c.s.map(x=>`<span class="aq-chip">☑ ${x.c.replace(/\./g,' ')} ${loEsc(x.t)}</span>`).join('')}</div>`:''}`).join('')}
+    <div class="aq-tip">${wide?'Ganze Kapitel anhaken · Modus „gemischt“ · ca. 30–40 Fragen':'Nur diese Unterthemen anhaken · ca. 20–30 Fragen'} · danach Score eintragen.</div></div>`;
+}
+function showStageAQ(id){
+  id=id||S.activeId; const st=ALL99.find(x=>x.id===id); if(!st) return;
+  document.getElementById('aq-modal')?.remove();
+  const sc=(P.aq&&P.aq.id===id)?P.aq.scope:aqDefaultScope(id);
+  const ov=document.createElement('div'); ov.className='modal-overlay'; ov.id='aq-modal'; ov.style.zIndex='10002';
+  const running=P.run&&(P.pomoMode||'stage')==='stage'&&P.phase==='work'&&S.activeId===id;
+  ov.innerHTML=`<div class="modal-box" style="max-width:520px;max-height:90vh;overflow:auto">
+    <div class="modal-title">🎯 ATPL Q in diesem Stage</div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:4px">#${st.id} ${st.t}${isReviewStage(id)?' <span style="font-size:11px;color:#2DD4BF;font-weight:500">· Review-Stage</span>':''}</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Der Pomodoro-Block läuft normal auf diesem Stage weiter (zählt als Lernzeit). Am Ende trägst du den Score ein — er fliesst in die Fach-Ampel, dein Rep-Plan bleibt unverändert.</div>
+    <div class="seg" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${Object.entries(AQ_SCOPES).map(([k,l])=>`<button id="aq-sc-${k}" onclick="aqPick(${id},'${k}')" style="font-size:12px;padding:5px 10px;${k===sc?'background:var(--blue);color:#fff;border-color:var(--blue)':''}">${l}</button>`).join('')}</div>
+    <div id="aq-guide">${aqGuideHTML(id,sc)}</div>
+    <input type="hidden" id="aq-scope" value="${sc}">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="primary" style="flex:1" onclick="aqStart(${id})">${running?'🎯 Laufender Block = ATPL Q':'▶ Pomodoro starten (ATPL Q)'}</button>
+      <button onclick="document.getElementById('aq-modal').remove();showAQScore(${id},document.getElementById('aq-scope')?.value||'${sc}',0,false)">🎯 Nur Score eintragen</button>
+      <button onclick="document.getElementById('aq-modal').remove()">Abbrechen</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+}
+function aqPick(id,k){
+  document.getElementById('aq-scope').value=k;
+  Object.keys(AQ_SCOPES).forEach(x=>{ const b=document.getElementById('aq-sc-'+x); if(b) b.style.cssText='font-size:12px;padding:5px 10px;'+(x===k?'background:var(--blue);color:#fff;border-color:var(--blue)':''); });
+  document.getElementById('aq-guide').innerHTML=aqGuideHTML(id,k);
+}
+function aqStart(id){
+  const scope=document.getElementById('aq-scope')?.value||aqDefaultScope(id);
+  document.getElementById('aq-modal')?.remove();
+  P.aq={id,scope};
+  if((P.pomoMode||'stage')!=='stage'){ P.pomoMode='stage'; }
+  S.activeId=id; P.userPick=id; S.tab='pomo';
+  if(!(P.run&&P.phase==='work')){ if(P.phase!=='work'){ P.phase='work'; P.secs=workSecs(); P.workElapsed=0; } startP(); }
+  render(); try{ showPW(); }catch(e){}
+}
+function aqCancel(){ P.aq=null; render(); }
+function aqBannerHTML(){
+  if(!P.aq||(P.pomoMode||'stage')!=='stage'||P.aq.id!==S.activeId) return '';
+  return `<div style="background:#132a26;border:1px solid #1f5a4f;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-weight:600;color:#2DD4BF;flex:1">🎯 Dieser Block: ATPL Q · ${AQ_SCOPES[P.aq.scope]||''}</div>
+    <button onclick="showStageAQ(${P.aq.id})" style="font-size:11px;padding:3px 8px">Bereich ändern</button><button onclick="aqCancel()" style="font-size:11px;padding:3px 8px">✕</button></div>
+    ${aqGuideHTML(P.aq.id,P.aq.scope)}</div>`;
+}
+function showAQScore(id,scope,mins,afterBlock,blockId){
+  document.getElementById('rep-score-modal')?.remove();
+  const st=ALL99.find(x=>x.id===id); if(!st) return;
+  const ov=document.createElement('div'); ov.className='modal-overlay'; ov.id='rep-score-modal'; ov.style.zIndex='10003';
+  ov.innerHTML=`<div class="modal-box" style="max-width:420px">
+    <div class="modal-title">🎯 ATPL Q-Score</div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:2px">#${st.id} ${st.t}</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:10px">${AQ_SCOPES[scope]||''}${afterBlock?` · ${mins} min als Lernzeit gebucht`:''}</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:13px">Richtig</span>
+      <input type="number" id="aq-ok" min="0" placeholder="z.B. 24" style="width:70px;padding:6px" oninput="aqCalc()"><span style="font-size:13px">von</span>
+      <input type="number" id="aq-of" min="1" placeholder="30" style="width:70px;padding:6px" oninput="aqCalc()"><span style="font-size:13px">=</span>
+      <input type="number" id="aq-pct" min="0" max="100" placeholder="%" style="width:70px;padding:6px"><span style="font-size:13px">%</span></div>
+    ${afterBlock?'':`<label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text2);margin-bottom:8px"><input type="checkbox" id="aq-book"> Zeit buchen: <input type="number" id="aq-mins" value="25" min="1" style="width:60px;padding:4px"> min auf diesen Stage</label>`}
+    <textarea class="modal-ta" id="aq-note" placeholder="Was sitzt noch nicht? (optional, kommt ins Lerntagebuch)" style="min-height:50px"></textarea>
+    ${afterBlock?`<label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text2);margin-top:6px"><input type="checkbox" id="aq-again"> Nächster Block auch ATPL Q</label>`:''}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button onclick="document.getElementById('rep-score-modal').remove()">Ohne Score</button>
+      <button class="primary" onclick="saveAQScore(${id},'${scope}',${afterBlock?'true':'false'},${blockId||0})">✓ Speichern</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  setTimeout(()=>document.getElementById('aq-ok')?.focus(),60);
+}
+function aqCalc(){ const ok=parseFloat(document.getElementById('aq-ok').value), of=parseFloat(document.getElementById('aq-of').value); if(ok>=0&&of>0) document.getElementById('aq-pct').value=Math.round(ok/of*100); }
+function saveAQScore(id,scope,afterBlock,blockId){
+  const v=document.getElementById('aq-pct')?.value; const sc=(v===''||v==null)?null:parseFloat(v);
+  const ok=parseInt(document.getElementById('aq-ok')?.value)||null, of=parseInt(document.getElementById('aq-of')?.value)||null;
+  const note=(document.getElementById('aq-note')?.value||'').trim();
+  const again=!!document.getElementById('aq-again')?.checked;
+  const mins=afterBlock?0:(document.getElementById('aq-book')?.checked?(parseInt(document.getElementById('aq-mins')?.value)||0):0);
+  if(!S.repLog) S.repLog={}; if(!S.repLog[id]) S.repLog[id]=[];
+  const score=sc==null||isNaN(sc)?null:Math.max(0,Math.min(100,Math.round(sc)));
+  S.repLog[id].push({date:_keyOf(new Date()),iv:0,score,kind:'inline',scope,ok,of,t:Date.now()});
+  if(blockId){ const b=(S.dayBlocks||[]).find(x=>x.id===blockId); if(b&&score!=null) b.topic=`🎯 ATPL Q ${score}%${ok&&of?` (${ok}/${of})`:''}`; }
+  if(note){ if(!S.log)S.log=[]; S.log.unshift({ts:new Date().toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'}),dt:todayStr(),sid:id,mode:'rep',txt:`🎯 ATPL Q${score!=null?' '+score+'%':''}: `+note,pb:1}); }
+  if(!again&&afterBlock) P.aq=null;
+  document.getElementById('rep-score-modal')?.remove();
+  if(mins>0){ const st=ALL99.find(x=>x.id===id); _addTypedBlock(`🎯 ATPL Q: ${st?st.t:''}${score!=null?' ('+score+'%)':''}`,id,mins,'pomo'); return; }
+  saveState(); render();
+  if(score!=null) loFlash(score>=REP_PASS?`✓ ATPL Q ${score}% gespeichert`:`ATPL Q ${score}% gespeichert — unter ${REP_PASS}%: später nochmal`);
+}
+
 function showExtraRep(preId){
   document.getElementById('xrep-modal')?.remove();
   const tk=_keyOf(new Date()), yk=_keyOf(_addDays(new Date(),-1));
@@ -5634,7 +5755,7 @@ function hzOverviewHTML(){
 const REPS_PER_DAY=1;
 function repsDoneOn(dk){
   let n=0; const rl=S.repLog||{};
-  Object.values(rl).forEach(arr=>(arr||[]).forEach(x=>{ if(x.date===dk&&x.kind!=='extra'&&x.kind!=='hz') n++; }));
+  Object.values(rl).forEach(arr=>(arr||[]).forEach(x=>{ if(x.date===dk&&x.kind!=='extra'&&x.kind!=='hz'&&x.kind!=='inline') n++; }));
   Object.entries(S.repDates||{}).forEach(([id,o])=>Object.entries(o||{}).forEach(([k,v])=>{ if(k.startsWith('done')&&_dsToKey(v)===dk&&!(rl[id]||[]).some(x=>x.date===dk)) n++; }));
   return n;
 }
