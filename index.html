@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v48</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v49</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v48</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v49</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -927,7 +927,7 @@ function dayGoalStatus(ds,d){
   else if(isPast||dayOver) state='miss';
   else state='open';
   const why=hoursMet&&!stageMet?`✓ ${actualH}h (≥${Math.min(MAX_DAY_H,cap>0?cap:MAX_DAY_H)}h)`
-    :stageMet?(goals.length?'✓ Stage erreicht':'✓ Stage fertig')
+    :stageMet?(finishedThatDay.length?'🏁 '+finishedThatDay.map(i=>'#'+i).join(', ')+' fertig':goals.some(g=>!/^[↻ ]*#\d+[^(]*$/.test(g.name))?'✓ Teilziel erreicht':'✓ Stage erreicht')
     :goals.length?'✗ '+goals.filter(g=>!g.met).map(g=>'#'+g.id).join(', ')+' offen'
     :actualH>0?'Plan unbekannt':'✗ nichts gelernt';
   return {goalH:cap,actualH,snap,goals,finishedThatDay,stageMet,hoursMet,state,why};
@@ -2296,7 +2296,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=48;
+const APP_VERSION=49;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -5855,6 +5855,25 @@ function getKW(d){
 // ── WEEK OVERVIEW ─────────────────────────────────────────────────
 let wkOffset=0; // 0 = aktuelle Woche, -1 = letzte Woche …
 function wkShift(n){ wkOffset=n===0?0:wkOffset+n; render(); }
+// v49: Übersicht aller 99 Stages – grün = fertig (mit Datum), blau = aktuell, grau = offen
+function stageProgressHTML(){
+  const dd=S.stageDoneDates||{};
+  const doneN=ALL99.filter(x=>isDone(x.id)).length;
+  const cur=ALL99.find(x=>!isDone(x.id));
+  const chips=ALL99.map(x=>{
+    const d=isDone(x.id), c=cur&&cur.id===x.id;
+    const when=dd[x.id]?(_dsToKey(dd[x.id])||'').split('-').reverse().slice(0,2).join('.'):'';
+    const st=d?'background:rgba(34,197,94,.18);border-color:var(--green);color:var(--green)':c?'background:rgba(59,130,246,.2);border-color:var(--blue,#3b82f6);color:#93c5fd':'color:var(--text3)';
+    return `<span title="#${x.id} ${x.t}${when?' · fertig '+when:''}" style="display:inline-flex;flex-direction:column;align-items:center;min-width:34px;padding:2px 4px;border:1px solid #2a2f45;border-radius:6px;font-size:10px;line-height:1.2;${st}">${d?'✓':''}${x.id}${when?`<span style="font-size:8px;opacity:.8">${when}</span>`:''}</span>`;
+  }).join('');
+  const recent=Object.entries(dd).filter(([id])=>isDone(+id)).sort((a,b)=>_dsToKey(b[1])<_dsToKey(a[1])?-1:1).slice(0,6)
+    .map(([id,v])=>{ const x=ALL99.find(y=>y.id===+id); return x?`#${x.id} ${x.t} <span style="color:var(--text3)">(${(_dsToKey(v)||'').split('-').reverse().join('.')})</span>`:''; }).filter(Boolean).join(' · ');
+  return `<div style="margin:6px 0 18px;padding:12px 14px;border:1px solid #2a2f45;border-radius:12px;background:var(--bg2,#161a2b)">
+    <div style="font-size:13px;font-weight:700;margin-bottom:6px">✅ Stage-Fortschritt: ${doneN} / 99 fertig${cur?` · als Nächstes #${cur.id} ${cur.t}`:''}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px">${chips}</div>
+    ${recent?`<div style="font-size:11px;color:var(--text2);margin-top:8px">Zuletzt fertig: ${recent}</div>`:''}
+  </div>`;
+}
 function renderWeekOverview(){
   const now=new Date();
   const dow=now.getDay();
@@ -5894,6 +5913,7 @@ function renderWeekOverview(){
       });
       if(blks.length>5) cells+=`<div style="font-size:9px;color:var(--text3)">+${blks.length-5} mehr</div>`;
     }
+    if(g.finishedThatDay.length) cells+=`<div style="font-size:10px;color:var(--green);margin-top:4px;font-weight:600">🏁 abgeschlossen: ${g.finishedThatDay.map(i=>'#'+i).join(', ')}</div>`;
     const verdict=g.state==='hit'?`<div class="wday-verdict hit">${g.why}</div><div class="wday-hrs">${g.actualH}h</div>`
       :g.state==='miss'?`<div class="wday-verdict miss">${g.why}</div><div class="wday-hrs">${g.actualH}h</div>`
       :`<div class="wday-hrs">${g.actualH>0?g.actualH+'h':''}</div>`;
@@ -5911,7 +5931,7 @@ function renderWeekOverview(){
       ${wkOffset!==0?`<button onclick="wkShift(0)">Diese Woche</button>`:''}
       <button onclick="wkShift(1)">▶</button>
     </div>
-  </div><div class="week-grid">${cells}</div>
+  </div><div class="week-grid">${cells}</div>${stageProgressHTML()}
   <div style="font-size:10px;color:var(--text3);margin:-8px 0 14px">🟩 eingeplante Stage erreicht (bei Teil-Tagen: geplante Stunden auf diese Stage gebucht) <i>oder</i> ≥ 8h gelernt · 🟥 Stage nicht erreicht · heute wird erst ab 21:00 rot · Tage vor dem 28.09. haben noch keinen gespeicherten Plan → grün nur wenn an dem Tag eine Stage fertig wurde oder ≥ 8h, rot wenn gar nichts gelernt, sonst neutral.</div>`;
   return h;
 }
