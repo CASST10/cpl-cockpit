@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CPL Cockpit ✈️</title>
-<!-- CPL Cockpit v47 -->
+<!-- CPL Cockpit v48 -->
 <style>
   :root {
     --bg: #0F1117; --bg2: #1A1D27; --bg3: #22263A;
@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v47</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v48</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v47</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v48</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -861,15 +861,22 @@ function checkDayRollover(){
 function snapshotTodayGoal(){
   const ds=todayStr();
   if(!S.dayGoals) S.dayGoals={};
-  if(S.dayGoals[ds]&&S.dayGoals[ds].v===2) return;
+  // v48: Plan neu einfrieren, wenn er veraltet ist (geplante Stage war schon VOR heute fertig —
+  // passiert, wenn ein Gerät morgens mit altem Stand geöffnet wurde, bevor der Sync kam)
+  const _old=S.dayGoals[ds];
+  if(_old&&_old.v===2&&!_goalStale(_old,_dsToKey(ds))) return;
   const sched=buildSchedule()[ds]||[];
   const stages=sched.filter(i=>i.type==='stage'||i.type==='stage_cont'||i.type==='stage_part')
     .map(i=>{ const m=(i.label||'').match(/\(([\d.]+)h\)/); return {id:i.stageId,full:i.type==='stage',h:m?parseFloat(m[1]):null,label:i.label}; });
-  S.dayGoals[ds]={v:2,stages,lhga:sched.some(i=>i.type==='lhga'),java:sched.some(i=>i.type==='java')};
+  S.dayGoals[ds]={v:2,at:Date.now(),stages,lhga:sched.some(i=>i.type==='lhga'),java:sched.some(i=>i.type==='java')};
   // alte Snapshots aufräumen (max. 120 Tage)
   const keys=Object.keys(S.dayGoals).sort((a,b)=>_dsToKey(a)<_dsToKey(b)?-1:1);
   while(keys.length>120) delete S.dayGoals[keys.shift()];
 }
+function _doneBefore(id,k){ if(!isDone(id)) return false; const dd=_dsToKey((S.stageDoneDates||{})[id]); return dd?dd<k:true; }
+function _goalStale(snap,k){ return (snap.stages||[]).some(x=>x.id&&_doneBefore(x.id,k)); }
+// erste Stage, die zu Beginn des Tages k noch offen war (Kursreihenfolge)
+function _firstOpenAt(k){ const st=ALL99.find(x=>!_doneBefore(x.id,k)); return st?st.id:null; }
 // Ziel-Status eines Tages = wurde die eingeplante Stage erreicht?
 //  • ganze Stage geplant  → grün, wenn sie bis Ende des Tages abgehakt ist
 //  • nur ein Teil geplant (z.B. "1.5h" an Arbeitstagen) → grün, wenn du so viele Stunden auf diese Stage gebucht hast (oder sie fertig ist)
@@ -888,11 +895,19 @@ function dayGoalStatus(ds,d){
   const hOn=id=>r(blks.filter(b=>b.stageId===id||b.sattFrom===id).reduce((a,b)=>a+(b.hours||(b.mins||0)/60),0)); // Thema-satt-Blöcke zählen für den pausierten Stage
   let goals=[];
   if(snap){
-    goals=(snap.stages||[]).filter(x=>x.id).map(x=>{
+    // v48: Ziele, deren Stage schon VOR diesem Tag fertig war, sind veraltet → durch die
+    // damals erste offene Stage ersetzen (sonst stand z.B. tagelang "✓ #63" obwohl #64 dran war)
+    let sg=(snap.stages||[]).filter(x=>x.id);
+    const fresh=sg.filter(x=>!_doneBefore(x.id,k));
+    if(fresh.length<sg.length){
+      const repl=_firstOpenAt(k);
+      sg=fresh.length?fresh:(repl?[{id:repl,full:sg.some(x=>x.full),h:(sg.find(x=>!x.full)||{}).h||null,stale:true}]:[]);
+    }
+    goals=sg.map(x=>{
       const st=ALL99.find(y=>y.id===x.id);
       const name='#'+x.id+(st?' '+st.t.split(' ').slice(0,2).join(' '):'');
       const met=x.full?doneBy(x.id):(doneBy(x.id)||hOn(x.id)>=(x.h||1)-0.05);
-      return {id:x.id,name:name+(x.full?'':` (${x.h||'?'}h)`),met};
+      return {id:x.id,name:(x.stale?'↻ ':'')+name+(x.full?'':` (${x.h||'?'}h)`),met};
     });
   }
   const finishedThatDay=Object.entries(S.stageDoneDates||{}).filter(([id,v])=>_dsToKey(v)===k&&isDone(+id)).map(([id])=>+id);
@@ -2281,7 +2296,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=47;
+const APP_VERSION=48;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -2411,7 +2426,8 @@ function mergeStates(local, remote){
   M.externalEvents=ev;
 
   // 4) Tagesziele (eingefrorene Pläne): bestehende behalten
-  M.dayGoals=Object.assign({},sec.dayGoals||{},prim.dayGoals||{});
+  M.dayGoals=Object.assign({},sec.dayGoals||{});
+  Object.entries(prim.dayGoals||{}).forEach(([d,g])=>{ const o=M.dayGoals[d]; if(!o||(g.at||0)>=(o.at||0)) M.dayGoals[d]=g; });
 
   // 5) Stages: abgehakt — neueste Aktion gewinnt, sonst "abgehakt" vereinigen
   const chk=Object.assign({},sec._chk||{});
