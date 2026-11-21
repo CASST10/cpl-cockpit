@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v50</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v51</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v50</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v51</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2296,7 +2296,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=50;
+const APP_VERSION=51;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -4498,7 +4498,7 @@ function renderPomo(){
   if(pm==='xrep'&&P.xrep){ const _x=ALL99.find(y=>y.id===P.xrep.id);
     h+=`<div style="background:#132a26;border:1px solid #1f5a4f;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="font-weight:600;color:#2DD4BF;flex:1">${P.xrep.sched?'🔁 Repetition':P.xrep.how==='hz'?'🟦 Horizon-Kurzrep':'🧠 Festigen'}: #${P.xrep.id} ${_x?_x.t:''}</div>
-      <button onclick="finishXrep()" style="font-size:11px;padding:3px 9px">✓ Fertig</button><button onclick="cancelXrep()" style="font-size:11px;padding:3px 9px">✕</button></div>
+      <button onclick="showPodcastPrompt(${P.xrep.id},${P.xrep.sched?P.xrep.iv:'null'})" style="font-size:11px;padding:3px 9px" title="NotebookLM-Prompt für einen Repetitions-Podcast">🎧 Podcast</button><button onclick="finishXrep()" style="font-size:11px;padding:3px 9px">✓ Fertig</button><button onclick="cancelXrep()" style="font-size:11px;padding:3px 9px">✕</button></div>
       ${P.xrep.how==='hz'?hzSelHTML(P.xrep.id):P.xrep.how==='free'?'<div style="font-size:12px;color:var(--text2)">Freies Wiederholen: Büchlein-Seite / Notizen durchgehen, aktiv aus dem Kopf erklären (Feynman), Lücken markieren.</div>':atplqSelHTML(P.xrep.id,(()=>{ if(!P.xrep.sched) return 'stage'; const rr=getRepStatus(P.xrep.id).find(q=>q.iv===P.xrep.iv)||{}; return rr.final?'final':rr.kind||'stage'; })())}</div>`; }
   if(pm==='stage') h+=aqBannerHTML();
   if(pm==='stage'&&S.activeId&&!(P.aq&&P.aq.id===S.activeId)) h+=`<div style="display:flex;justify-content:flex-end;margin:-4px 0 10px"><button onclick="showStageAQ(${S.activeId})" style="font-size:12px;padding:5px 12px;background:#132a26;border-color:#1f5a4f;color:#2DD4BF">🎯 ATPL Q in diesem Stage${isReviewStage(S.activeId)?' · Review':''}</button></div>`;
@@ -5133,6 +5133,7 @@ function showRepScore(stageId, iv, opts){
     <div class="modal-title">🎯 ${repKindLabel(rp)}${rp.retry?' · Wiederholung':''}</div>
     <div style="font-size:13px;font-weight:600;margin-bottom:4px">#${st.id} ${st.t}</div>
     <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${how}${rp.lastFail!=null?`<br>Letztes Mal: <b style="color:var(--red)">${rp.lastFail}%</b>`:''}</div>
+    <div style="margin:0 0 8px"><button onclick="showPodcastPrompt(${stageId},${iv})" style="font-size:12px;padding:4px 10px">🎧 Podcast-Prompt für NotebookLM</button></div>
     ${atplqSelHTML(stageId, rp.final?'final':rp.kind)}
     ${opts.afterTimer?`<div style="font-size:12px;color:var(--green);margin-bottom:8px">⏱ Zeit ist schon gebucht — jetzt nur noch den Score eintragen.</div>`:`<div class="rep-start">
       <span style="font-size:12px;color:var(--text2)">Jetzt machen:</span>
@@ -5283,6 +5284,71 @@ function repMetricsHTML(){
 }
 // Mikro-Rep: 5 Lernziele, je "sicher / wackelig / weiss nicht"
 let MR=null;
+// ── v51: PODCAST-REPETITION (NotebookLM "Audio Overview anpassen") ──
+function _nlmPart(id,label){ const t=STAGE_NLM[id]; if(!t) return ''; const m=t.match(new RegExp('(?:^|\\n)'+label+':\\s*([^\\n]*)')); return m?m[1].trim():''; }
+function _podKind(id,iv){
+  const rs=getRepStatus(id); const rp=(iv!=null&&rs.find(x=>x.iv===iv))||rs.find(x=>x.status!=='done')||{};
+  return {iv:rp.iv||1,kind:rp.final?'final':(rp.kind==='fach'?'fach':'stage')};
+}
+function _podWeak(id){
+  const conf=S.loConf||{}; return loKeys(id).filter(k=>{ const c=conf[id+'|'+k]; return c&&c.v!=='sure'; });
+}
+function repPodcastPrompt(id,iv){
+  const st=ALL99.find(x=>x.id===id); if(!st) return '';
+  const pk=_podKind(id,iv); const d=STAGE_LOS[id]||{};
+  const subj=(SUBJ_NAMES[st.f]||'')+' ('+st.f+')';
+  const sc=lastRepScore(id);
+  const len=pk.kind==='stage'?(pk.iv<=1?'about 8–10 minutes':'about 10–12 minutes'):'about 15 minutes';
+  const head=pk.kind==='stage'
+    ?`REPETITION PODCAST – stage ${d.c||''} ${st.t} (EASA ATPL/CPL(A), subject ${subj}). This is revision ${pk.iv<=1?'the day after':'about one week after'} I first learned this stage, so assume I have seen it once and want it to stick.`
+    :`MIXED REVISION PODCAST – subject ${subj}. I want to interleave all the stages of this subject that I have already finished, so I practise telling topics apart and linking them.`;
+  let scope='';
+  if(pk.kind==='stage'){
+    const cover=_nlmPart(id,'COVER'), dnc=_nlmPart(id,'DO NOT COVER');
+    const los=loKeys(id).map((k,i)=>`${i+1}. [${k}] ${loText(id,k)}`).join('\n');
+    scope=`SCOPE: Focus EXCLUSIVELY on this one stage. Everything else in the notebook is out of scope.
+${cover?`COVER: ${cover}\n`:''}${los?`EASA learning objectives to cover:\n${los}\n`:''}${dnc?`DO NOT COVER: ${dnc}\n`:''}`;
+    const weak=_podWeak(id);
+    if(weak.length) scope+=`\nMY WEAK SPOTS (spend about half of the time here, explain them slowly with a different angle or memory hook):\n${weak.map(k=>`- [${k}] ${loText(id,k)}`).join('\n')}\n`;
+    if(sc!=null&&sc<REP_PASS) scope+=`\nMy last practice-question score on this stage was only ${sc}%, so be thorough on the basics and on typical exam traps.\n`;
+  } else {
+    const ss=ALL99.filter(x=>x.f===st.f&&isDone(x.id));
+    scope=`SCOPE: Only the stages below (all from subject ${subj}); nothing from other subjects.\n`+ss.map(x=>{ const c=_nlmPart(x.id,'COVER'); const g=(STAGE_LOS[x.id]||{}).g||[]; return `- #${x.id} ${x.t}: ${c||g.map(y=>y[1]).slice(0,6).join('; ')}`; }).join('\n')+'\n';
+    const wk=ss.filter(x=>{ const s2=lastRepScore(x.id); return s2!=null&&s2<REP_PASS; });
+    if(wk.length) scope+=`\nMy weakest stages by recent practice score (give them extra time): ${wk.map(x=>'#'+x.id+' '+x.t+' ('+lastRepScore(x.id)+'%)').join(', ')}.\n`;
+  }
+  const how=pk.kind==='stage'
+?`FORMAT: Two hosts, spoken language, ${len}. Do NOT read a summary; make it ACTIVE RECALL:
+1. Start with 3 quick-fire questions on the stage and let the hosts answer them as if testing each other.
+2. Then go through the learning objectives in order; for each one state the key rule/number/definition in one or two sentences, then give a memory hook (mnemonic, picture, or comparison).
+3. Say numbers and units clearly (e.g. "one thousand five hundred feet", "three percent"); for formulas say them in words and give one quick example.
+4. Point out typical exam traps and common mix-ups ("students often think X, but it is Y").
+5. Finish with 5 rapid-fire exam-style questions with the answers, then a 60-second recap of the must-know facts.`
+:`FORMAT: Two hosts, spoken language, ${len}. Make it ACTIVE RECALL and INTERLEAVED:
+1. Jump between the stages instead of going through them one by one; ask a question about one stage, then link the answer to another stage.
+2. Highlight look-alike facts from different stages that are easy to confuse, and how to tell them apart.
+3. Say numbers and units clearly; give one memory hook per key fact.
+4. Finish with 8 rapid-fire exam-style questions from mixed stages with the answers, then a 60-second recap.`;
+  return `${head}\n\nUse ONLY the sources in this notebook.\n\n${scope}\n${how}\n\nAVOID: a general introduction to the subject, long stories, and repeating the same point twice.`;
+}
+function showPodcastPrompt(id,iv){
+  const st=ALL99.find(x=>x.id===id); if(!st) return;
+  document.getElementById('pod-modal')?.remove();
+  const pk=_podKind(id,iv);
+  window._podText=repPodcastPrompt(id,iv);
+  const ov=document.createElement('div'); ov.className='modal-overlay'; ov.id='pod-modal'; ov.style.zIndex='10003';
+  ov.innerHTML=`<div class="modal-box" style="max-width:560px;max-height:90vh;overflow:auto">
+    <div class="modal-title">🎧 Podcast-Repetition · ${pk.kind==='stage'?'#'+id+' '+loEsc(st.t):'Fach-Mix '+st.f}</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">In NotebookLM: <b>Audio Overview → Anpassen</b>, Text einfügen, erstellen. Spiel ihn dann als Repetitionsblock ab und beantworte die Fragen laut mit.</div>
+    <textarea class="modal-ta" readonly style="min-height:260px;font-size:11px" onclick="this.select()">${loEsc(window._podText)}</textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap">
+      <button onclick="window.open('https://notebooklm.google.com','_blank','noopener')">NotebookLM öffnen ↗</button>
+      <button onclick="document.getElementById('pod-modal').remove()">Schliessen</button>
+      <button class="primary" onclick="copyText(window._podText,'✓ Podcast-Prompt kopiert')">📋 Prompt kopieren</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+}
 function startMicroRep(stageId){
   let id=stageId;
   if(!id){
@@ -5572,6 +5638,7 @@ function showExtraRep(preId){
       <button onclick="const i=xrId(); if(i) startHzRep(i)">🟦 Horizon-Kurzrep<br><span>${HZ_QN} Fragen · ${HZ_MINS} min</span></button>
       <button onclick="xrMicro()">⚡ Mikro-Rep<br><span>5 Lernziele · 5 min</span></button>
       <button onclick="xrScoreOnly()">🎯 Nur Score eintragen<br><span>schon gemacht</span></button>
+      <button onclick="const i=xrId(); if(i) showPodcastPrompt(i)">🎧 Podcast-Prompt<br><span>für NotebookLM</span></button>
     </div>
     <div style="display:flex;justify-content:flex-end;margin-top:12px"><button onclick="document.getElementById('xrep-modal').remove()">Abbrechen</button></div>
   </div>`;
