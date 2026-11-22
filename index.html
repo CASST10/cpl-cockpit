@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v51</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v52</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v51</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v52</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2296,7 +2296,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=51;
+const APP_VERSION=52;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -5849,7 +5849,20 @@ function repQueue(){
     const rp=getRepStatus(x.id).find(r=>r.status==='due'||r.status==='today');
     if(rp) out.push({s:x,rp,sc:lastRepScore(x.id)});
   });
-  return out.sort((a,b)=>(b.rp.retry?1:0)-(a.rp.retry?1:0)||(a.rp.due-b.rp.due)||((a.sc??101)-(b.sc??101))||(a.s.id-b.s.id));
+  const sorted=out.sort((a,b)=>(b.rp.retry?1:0)-(a.rp.retry?1:0)||(a.rp.due-b.rp.due)||((a.sc??101)-(b.sc??101))||(a.s.id-b.s.id));
+  // v52: nie zweimal hintereinander dasselbe Fach (Vortag bzw. heute erledigte Rep zählt als Vorgänger)
+  let prev=_lastRepSubject(); const rest=sorted.slice(), res=[];
+  while(rest.length){ let i=rest.findIndex(o=>o.s.f!==prev); if(i<0) i=0; const o=rest.splice(i,1)[0]; res.push(o); prev=o.s.f; }
+  return res;
+}
+// Fach der zuletzt erledigten Rep (heute oder gestern); sonst null
+function _lastRepSubject(){
+  const tk=_keyOf(new Date()), yk=_keyOf(_addDays(new Date(),-1));
+  const best={d:'',f:null}; const rl=S.repLog||{};
+  const take=(id,d)=>{ if(d!==tk&&d!==yk) return; const st=ALL99.find(x=>x.id==id); if(st&&d>=best.d){ best.d=d; best.f=st.f; } };
+  Object.entries(rl).forEach(([id,arr])=>(arr||[]).forEach(x=>{ if(x.kind!=='extra'&&x.kind!=='hz'&&x.kind!=='inline') take(id,x.date); }));
+  Object.entries(S.repDates||{}).forEach(([id,o])=>Object.entries(o||{}).forEach(([k,v])=>{ if(k.startsWith('done')) take(id,_dsToKey(v)); }));
+  return best.f;
 }
 // Rep des Tages: null wenn heute schon erledigt (Pflicht erfüllt)
 function repOfTheDay(){
