@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v93</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v94</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v93</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v94</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2297,7 +2297,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=93;
+const APP_VERSION=94;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -2989,6 +2989,11 @@ function toggleLO(id,key,on){
   document.querySelectorAll('.lo-cnt-'+id).forEach(el=>el.textContent=c.done+'/'+c.total);
   document.querySelectorAll('.lo-bar-'+id).forEach(el=>el.style.width=(c.total?Math.round(c.done/c.total*100):0)+'%');
 }
+// v94: Kürzel in Lernziel-Texten mit Erklärung (Tooltip am Laptop, Liste darunter für Handy/iPad)
+function loAbbrify(t){
+  const G=window.ABBR||{};
+  return t.replace(/(?<![A-Za-z0-9&#;])([A-Z][A-Z0-9]{1,6})(?![a-z0-9])/g,m=>G[m]&&m!=='EASA'?`<abbr title="${loEsc(G[m])}" style="text-decoration:underline dotted;cursor:help">${m}</abbr>`:m);
+}
 function loBodyHTML(id){
   const d=STAGE_LOS[id]; if(!d) return '';
   const set=new Set(((S.loDone||{})[id])||[]);
@@ -3000,11 +3005,13 @@ function loBodyHTML(id){
       h+=`<label class="lo-item lo-chap"><input type="checkbox"${on?' checked':''} onchange="toggleLO(${id},'${g[0]}',this.checked)"><span><b>${loEsc(g[1])}</b> <span class="lo-code">${g[0]}</span></span></label>`;
       return;
     }
-    h+=`<div class="lo-gt">${loEsc(g[1])} <span class="lo-code">${g[0]}</span></div>`;
+    h+=`<div class="lo-gt">${loAbbrify(loEsc(g[1]))} <span class="lo-code">${g[0]}</span></div>`;
     g[2].forEach(l=>{
       const k=g[0]+':'+l[0], on=set.has(k);
-      h+=`<label class="lo-item"><input type="checkbox"${on?' checked':''} onchange="toggleLO(${id},'${k}',this.checked)"><span><span class="lo-num">${l[0]}</span> ${loEsc(l[1])}</span></label>`;
+      h+=`<label class="lo-item"><input type="checkbox"${on?' checked':''} onchange="toggleLO(${id},'${k}',this.checked)"><span><span class="lo-num">${l[0]}</span> ${loAbbrify(loEsc(l[1]))}</span></label>`;
     });
+    const ab=cardAbbrHTML(g[1],g[2].map(l=>l[1]).join(' '));
+    if(ab) h+=`<div style="margin:2px 0 8px 32px">${ab}</div>`;
   });
   if(d.x&&d.x.length) h+=`<div class="lo-note">➕ Zusätzlich (KSA, ohne EASA-LO-Text): ${d.x.map(loEsc).join(', ')}</div>`;
   return h;
