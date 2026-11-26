@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v114</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v115</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v114</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v115</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2297,7 +2297,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=114;
+const APP_VERSION=115;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -2383,7 +2383,7 @@ function _allBlocksOf(st){
 }
 function _unionById(a,b,del){
   const m=new Map();
-  [...(a||[]),...(b||[])].forEach(x=>{ if(!x) return; if(x.id!=null&&del.has(x.id)) return; const k=x.id!=null?'i'+x.id:JSON.stringify(x); if(!m.has(k)) m.set(k,x); });
+  [...(a||[]),...(b||[])].forEach(x=>{ if(!x) return; if(x.id!=null&&del.has(x.id)) return; const k=x.id!=null?'i'+x.id:JSON.stringify(x); const o=m.get(k); if(!o||(x.mt||0)>(o.mt||0)) m.set(k,x); });
   return [...m.values()];
 }
 // primary = Stand mit Vorrang bei Einstellungen (neuerer), other = wird nur ergänzt
@@ -2400,7 +2400,7 @@ function mergeStates(local, remote){
   const bm=new Map();
   [..._allBlocksOf(prim),..._allBlocksOf(sec)].forEach(b=>{
     if(b.id!=null&&del.has(b.id)) return;
-    const k=_blkKey(b); if(!bm.has(k)) bm.set(k,b);
+    const k=_blkKey(b), o=bm.get(k); if(!o||(b.mt||0)>(o.mt||0)) bm.set(k,b);
   });
   const todayK=_dsToKey(todayStr());
   const byK={}, day=[];
@@ -3055,11 +3055,6 @@ const isDone=id=>DONE_DEF.has(id)||S.checked[id];
 const getH=id=>parseFloat(S.hours[id])||0;
 const r=n=>Math.round(n*10)/10;
 function setH(id,v){ S.hours[id]=Math.max(0,r(parseFloat(v)||0)); saveState(); }
-function toggleStage(id){
-  if(DONE_DEF.has(id))return;
-  if(S.checked[id])delete S.checked[id]; else{ S.checked[id]=true; if(!S.hours[id])S.hours[id]=0; }
-  saveState(); render();
-}
 function toggleWeek(w){ S.collapsedWeeks[w]=!S.collapsedWeeks[w]; render(); }
 function toggleDone(){ S.doneCollapsed=!S.doneCollapsed; render(); }
 
@@ -3617,7 +3612,7 @@ function addCustomBlock(){
 }
 function togDayBlock(id){
   const b=(S.dayBlocks||[]).find(b=>b.id===id);
-  if(b){ b.done=!b.done; saveState(); render(); }
+  if(b){ b.done=!b.done; b.mt=Date.now(); saveState(); render(); }
 }
 function delDayBlock(id){
   const b=(S.dayBlocks||[]).find(b=>b.id===id);
@@ -4299,7 +4294,7 @@ function buildWkBlock(w,ws){
   h+=`</div>`; return h;
 }
 function addBlk(sid){const inp=document.getElementById('bi-'+sid);const val=(inp&&inp.value.trim())||'Block';if(!S.blocks[sid])S.blocks[sid]=[];S.blocks[sid].push({id:Date.now(),lbl:val,done:false});if(inp)inp.value='';saveState();render();}
-function togBlk(sid,bid){const b=(S.blocks[sid]||[]).find(b=>b.id===bid);if(b){b.done=!b.done;saveState();render();}}
+function togBlk(sid,bid){const b=(S.blocks[sid]||[]).find(b=>b.id===bid);if(b){b.done=!b.done;b.mt=Date.now();saveState();render();}}
 function delBlk(sid,bid){if(S.blocks[sid])S.blocks[sid]=S.blocks[sid].filter(b=>b.id!==bid);saveState();render();}
 
 // ── POMODORO ──────────────────────────────────────────────────────
@@ -7112,7 +7107,7 @@ function renderOrgTodoList(){
 }
 function toggleOrgTodo(id){
   const t=(S.todos||[]).find(t=>t.id===id);
-  if(t){ t.done=true; saveState(); }
+  if(t){ t.done=true; t.mt=Date.now(); saveState(); }
   const el=document.getElementById('org-todo-list');
   if(el) el.innerHTML=renderOrgTodoList();
   const badge=document.getElementById('todo-badge');
@@ -7120,11 +7115,11 @@ function toggleOrgTodo(id){
 }
 function toggleTodo(id){
   const t=(S.todos||[]).find(t=>t.id===id);
-  if(t){t.done=!t.done;saveState();renderTodos();}
+  if(t){t.done=!t.done;t.mt=Date.now();saveState();renderTodos();}
 }
 function setTodoCategory(id,cat){
   const t=(S.todos||[]).find(t=>t.id===id);
-  if(t){ t.type=(t.type===cat)?'task':cat; saveState(); renderTodos(); }
+  if(t){ t.type=(t.type===cat)?'task':cat; t.mt=Date.now(); saveState(); renderTodos(); }
 }
 function deleteTodo(id){
   S.todos=(S.todos||[]).filter(t=>t.id!==id);
@@ -7132,6 +7127,7 @@ function deleteTodo(id){
   saveState();renderTodos();
 }
 function clearDoneTodos(){
+  (S.todos||[]).filter(t=>t.done).forEach(t=>_tomb(t.id));
   S.todos=(S.todos||[]).filter(t=>!t.done);
   saveState();renderTodos();
 }
@@ -8243,43 +8239,3 @@ function renderLhga(){
 
 </body>
 </html>
-
-<!-- PWA Install Banner -->
-<div id="pwa-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;
-  background:linear-gradient(135deg,#185FA5,#1D9E75);padding:10px 16px;
-  align-items:center;gap:12px;box-shadow:0 2px 12px rgba(0,0,0,.4)">
-  <span style="font-size:22px">✈️</span>
-  <div style="flex:1;min-width:0">
-    <div style="font-size:13px;font-weight:700;color:#fff">CPL Cockpit als App installieren</div>
-    <div style="font-size:11px;color:rgba(255,255,255,.8)">Direkt vom Homescreen starten – offline verfügbar</div>
-  </div>
-  <button onclick="installPWA()" style="background:#fff;color:#185FA5;border:none;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Installieren</button>
-  <button onclick="dismissPWA()" style="background:transparent;border:none;color:rgba(255,255,255,.7);font-size:18px;cursor:pointer;padding:4px;flex-shrink:0">✕</button>
-</div>
-
-
-
-<!-- Todo Panel -->
-<div id="todo-panel" class="todo-panel">
-  <div class="todo-header">
-    <span style="font-size:20px">📝</span>
-    <h3>Todos & Ideen</h3>
-    <button onclick="todoClose()" style="background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px">✕</button>
-  </div>
-  <div class="todo-body" id="todo-body">
-    <div style="text-align:center;padding:2rem;color:var(--text3)">Lädt...</div>
-  </div>
-  <div class="todo-footer">
-    <button onclick="showDayEnd()" style="width:100%;padding:10px;background:var(--blue-bg);border-color:#1A3A80;color:#60A5FA;font-size:13px;font-weight:600">
-      🌙 Tagesabschluss
-    </button>
-  </div>
-</div>
-
-<!-- Todo FAB -->
-<button class="todo-fab" id="todo-fab" onclick="todoOpen()" title="Todos & Tagesabschluss">
-  📝
-  <span class="badge" id="todo-badge" style="display:none">0</span>
-</button>
-
-</body>
