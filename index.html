@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v58</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v59</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v58</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v59</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2297,7 +2297,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=58;
+const APP_VERSION=59;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -5285,6 +5285,19 @@ function repMetricsHTML(){
 }
 // Mikro-Rep: 5 Lernziele, je "sicher / wackelig / weiss nicht"
 let MR=null;
+// v59: laufende Mikro-Rep überlebt App-Neustart/Wechsel (lokal pro Gerät), Pille zum Zurückkehren
+function _mrSave(){ try{ if(MR) localStorage.setItem('cpl_mr',JSON.stringify({at:Date.now(),MR:MR},(k,v)=>k==='due'?undefined:v)); else localStorage.removeItem('cpl_mr'); }catch(e){} }
+function _mrRestore(){ try{ const o=JSON.parse(localStorage.getItem('cpl_mr')||'null'); if(o&&o.MR&&Date.now()-o.at<36*3600*1000&&!MR){ MR=o.MR; } else if(o&&!MR) localStorage.removeItem('cpl_mr'); }catch(e){} updMrPill(); }
+function mrHide(){ document.getElementById('micro-modal')?.remove(); _mrSave(); updMrPill(); }
+function mrCancel(){ MR=null; document.getElementById('micro-modal')?.remove(); _mrSave(); updMrPill(); }
+function updMrPill(){
+  let el=document.getElementById('mr-pill'); const open=!!document.getElementById('micro-modal');
+  if(!MR||open){ if(el) el.style.display='none'; return; }
+  if(!el){ el=document.createElement('button'); el.id='mr-pill';
+    el.style.cssText='position:fixed;left:10px;bottom:44px;z-index:9001;font-size:12px;padding:6px 12px;border-radius:999px;background:#1f2a52;border:1px solid #3d5adb;color:#cfd8ff;cursor:pointer';
+    el.onclick=()=>renderMicroRep(); document.body.appendChild(el); }
+  el.style.display='block'; el.textContent=`⚡ Mikro-Rep weiter (${Object.keys(MR.ans||{}).length}/${(MR.keys||[]).length})`;
+}
 // ── v51: PODCAST-REPETITION (NotebookLM "Audio Overview anpassen") ──
 function _nlmPart(id,label){ const t=STAGE_NLM[id]; if(!t) return ''; const m=t.match(new RegExp('(?:^|\\n)'+label+':\\s*([^\\n]*)')); return m?m[1].trim():''; }
 function _podKind(id,iv){
@@ -5447,11 +5460,13 @@ function renderMicroRep(){
       <div style="display:flex;gap:5px">${B(k,'sure','✅ sicher','#16a34a')}${B(k,'shaky','〰️ wackelig','#ca8a04')}${B(k,'no','❓ weiss nicht','#dc2626')}</div>
     </div>`).join('')}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
-      <button onclick="MR=null;document.getElementById('micro-modal').remove()">Abbrechen</button>
+      <button onclick="mrCancel()">Verwerfen</button>
+      <button onclick="mrHide()">⏸ Pausieren</button>
       <button onclick="startMicroRep()">↻ Anderer Stage</button>
       <button class="primary" ${done?'':'disabled style="opacity:.5"'} onclick="finishMicroRep()">✓ Fertig</button>
     </div></div>`;
   document.body.appendChild(ov);
+  _mrSave(); updMrPill();
 }
 function microAns(k,v){ MR.ans[k]=v; renderMicroRep(); }
 function finishMicroRep(){
@@ -5468,7 +5483,7 @@ function finishMicroRep(){
   const st=ALL99.find(x=>x.id===MR.id);
   const weak=MR.cards?MR.loWeak:MR.keys.filter(k=>MR.ans[k]!=='sure');
   const id=MR.id; const sure=MR.keys.filter(k=>MR.ans[k]==='sure').length;
-  MR=null;
+  MR=null; _mrSave(); updMrPill();
   document.getElementById('micro-modal')?.remove();
   _addTypedBlock(`⚡ Mikro-Rep: ${st?st.t:''} (${sure}/5 sicher)`,id,Math.max(5,mins),'rep');
   showMicroResult(id,weak,sure);
@@ -7699,7 +7714,7 @@ function exportPDFReport(){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-loadState().then(()=>{ try{ _repairDoneDates(); }catch(e){} try{ render(); }catch(e){} pomoRestoreLocal(); pomoPoll(true); if(_setupFromLink){ _toast('✓ Sync verbunden — dieses Gerät heisst „'+devName()+'“'); if(_isIOS()&&!_isStandalone()) setTimeout(showIOSInstallHint,900); } else if(!gistOK()&&!_lsGet('cpl_sync_skip')) setTimeout(showSyncSetup,600); });
+loadState().then(()=>{ try{ _repairDoneDates(); }catch(e){} try{ render(); }catch(e){} pomoRestoreLocal(); _mrRestore(); pomoPoll(true); if(_setupFromLink){ _toast('✓ Sync verbunden — dieses Gerät heisst „'+devName()+'“'); if(_isIOS()&&!_isStandalone()) setTimeout(showIOSInstallHint,900); } else if(!gistOK()&&!_lsGet('cpl_sync_skip')) setTimeout(showSyncSetup,600); });
 // Init todo badge after load
 setTimeout(()=>{
   const open=(S.todos||[]).filter(t=>!t.done).length;
