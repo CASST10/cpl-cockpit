@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v52</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v53</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v52</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v53</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2296,7 +2296,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=52;
+const APP_VERSION=53;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -3291,7 +3291,12 @@ function _flowCounting(){ return P.flow&&P.block>=1&&P.phase==='work'&&P.pomoMod
 function tickP(){
   if(P.phase==='work') P.flowElapsed++; // durchgehende Zähluhr, läuft immer mit
 
-  if(P.secs>0 && !(_flowCounting())){
+  const _xrOver=P.phase==='work'&&P.pomoMode==='xrep'&&P.xrep&&P.xrep.how!=='hz'&&P.secs<=0&&!pomoIsFollower();
+  if(_xrOver){
+    // v53: Rep-Zeit um → läuft weiter (Überzeit), bis du "Fertig" drückst
+    if(!P.xrep.over){ P.xrep.over=true; try{ if(!_bulkTick) loFlash('⏱ Zeit um – läuft weiter, drück «Fertig» wenn du durch bist'); }catch(e){} }
+    P.workElapsed++;
+  } else if(P.secs>0 && !(_flowCounting())){
     // Normaler Countdown — ausser: Flow-Modus UND schon min. 1 Block fertig
     // → dann zählt NUR noch flowElapsed hoch, P.secs wird ignoriert/nicht mehr
     // runtergezählt, damit die Anzeige nicht wie ein neuer Block aussieht.
@@ -3468,7 +3473,7 @@ function toggleP(){
   if(!P.run&&(P.pomoMode||'stage')==='stage'&&S.activeId&&isDone(S.activeId)&&P.phase==='work'&&P.workElapsed===0){
     // Fertiger Stage gewählt → als Repetition starten (fällig: geplante Rep, sonst Extra-Rep)
     const nx=getRepStatus(S.activeId).find(r=>r.status==='due'||r.status==='today');
-    startExtraRep(S.activeId,Math.round(workSecs()/60),'atplq',nx?{sched:true,iv:nx.iv}:{});
+    startExtraRep(S.activeId,Math.max(45,Math.round(workSecs()/60)),'atplq',nx?{sched:true,iv:nx.iv}:{});
     return;
   }
   P.run ? pauseP() : startP();
@@ -3492,7 +3497,7 @@ function updP(){
   const workMin=P.mode==='home'?25:50;
   const breakMin=P.phase==='break'?(P.mode==='home'?5:10):0;
   const phaseText=P.pomoMode==='xrep'&&P.phase==='work'
-    ?`${P.xrep&&P.xrep.sched?'🔁 Repetition':'🧠 Festigen — Extra-Rep'} (${Math.round((P.xrep&&P.xrep.mins||25))}min)`
+    ?(P.xrep&&P.xrep.over?'⏱ Überzeit – drück «Fertig», wenn du durch bist':`${P.xrep&&P.xrep.sched?'🔁 Repetition':'🧠 Festigen — Extra-Rep'} (${Math.round((P.xrep&&P.xrep.mins||25))}min)`)
     :P.pomoMode==='satt'&&P.phase==='work'
     ?`🔀 Thema-Wechsel — ATPL_Q (${Math.round(SATT_SECS/60)}min)`
     :isFlowCounting
@@ -3500,7 +3505,8 @@ function updP(){
     :P.phase==='work'
       ?`Block ${P.block+1}/${P.total} — Fokus (${workMin}min)`
       :`Pause (${breakMin}min)`;
-  const timeText=isFlowCounting?fmt(P.flowElapsed):fmt(P.secs);
+  const _over=P.pomoMode==='xrep'&&P.xrep&&P.xrep.over&&P.phase==='work';
+  const timeText=_over?'+'+fmt(Math.max(0,P.workElapsed-Math.round((P.xrep.mins||25)*60))):isFlowCounting?fmt(P.flowElapsed):fmt(P.secs);
 
   // ── Update persistent widget (always exists) ──────────────────
   const pw=document.getElementById('pw-clock');
@@ -4670,7 +4676,7 @@ function renderPomo(){
       <button onclick="addWorkTime(10)" style="font-size:12px;padding:4px 11px;background:var(--blue-bg);border-color:#1A3A80;color:#60A5FA" title="+10min Fokus hinzufügen">+10min Fokus</button>
       <button onclick="addWorkTime(25)" style="font-size:12px;padding:4px 11px;background:var(--blue-bg);border-color:#1A3A80;color:#60A5FA" title="+25min Fokus hinzufügen">+25min Fokus</button>
       <button onclick="pauseNow()" style="font-size:12px;padding:4px 11px;background:var(--amber-dim);border-color:#5a3a00;color:var(--amber)" title="Sofort in Pause wechseln">☕ ${P.pomoMode==='satt'?'Fertig':'Pause jetzt'}</button>
-      ${(P.pomoMode||'stage')==='stage'?`<button onclick="startExtraRep(S.activeId,25,'atplq')" style="font-size:12px;padding:4px 11px;background:#132a26;border-color:#1f5a4f;color:#2DD4BF" title="Jetzt 25 min ATPL_Q zu diesem Stage (festigen)">🧠 Festigen</button>`:''}
+      ${(P.pomoMode||'stage')==='stage'?`<button onclick="startExtraRep(S.activeId,45,'atplq')" style="font-size:12px;padding:4px 11px;background:#132a26;border-color:#1f5a4f;color:#2DD4BF" title="Jetzt 45 min ATPL_Q zu diesem Stage (festigen)">🧠 Festigen</button>`:''}
       ${(P.pomoMode||'stage')==='stage'?`<button onclick="themaSatt()" style="font-size:12px;padding:4px 11px;background:#2a1530;border-color:#5b2a6b;color:#E879F9" title="Stage pausieren, 25min ATPL_Q zu einem anderen Fach, danach zurück">😵 Thema satt</button>`:''}
     </div>
 
@@ -5137,8 +5143,8 @@ function showRepScore(stageId, iv, opts){
     ${atplqSelHTML(stageId, rp.final?'final':rp.kind)}
     ${opts.afterTimer?`<div style="font-size:12px;color:var(--green);margin-bottom:8px">⏱ Zeit ist schon gebucht — jetzt nur noch den Score eintragen.</div>`:`<div class="rep-start">
       <span style="font-size:12px;color:var(--text2)">Jetzt machen:</span>
-      <button class="primary" onclick="repStartTimer(${stageId},${iv},25)">▶ 25 min Pomodoro</button>
-      <button class="primary" onclick="repStartTimer(${stageId},${iv},50)">▶ 50 min</button>
+      <button class="primary" onclick="repStartTimer(${stageId},${iv},45)">▶ 45 min Timer</button>
+      <button class="primary" onclick="repStartTimer(${stageId},${iv},60)">▶ 60 min</button>
     </div>
     <div style="font-size:11px;color:var(--text3);margin:2px 0 10px">… oder schon gemacht? Dann unten Score eintragen:</div>`}
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
@@ -5464,9 +5470,9 @@ function dashTodayPanelHTML(){
   const stat=(v,l,c)=>`<div class="dtp-stat"><div style="color:${c}">${v}</div><span>${l}</span></div>`;
   return `<div class="card dash-wide">
     ${st?`<div class="dtp-fest">
-      <div style="flex:1;min-width:200px"><b>🧠 Festigen:</b> Gestern hast du <b>#${st.id} ${st.t}</b> gelernt (${fest.h}h). 15–25 min Wiederholen heute verankert es im Langzeitgedächtnis.</div>
+      <div style="flex:1;min-width:200px"><b>🧠 Festigen:</b> Gestern hast du <b>#${st.id} ${st.t}</b> gelernt (${fest.h}h). 20–45 min Wiederholen heute verankert es im Langzeitgedächtnis.</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap">
-        <button onclick="startExtraRep(${st.id},25,'atplq')">▶ 25 min ATPL_Q</button>
+        <button onclick="startExtraRep(${st.id},45,'atplq')">▶ 45 min ATPL_Q</button>
         <button onclick="startExtraRep(${st.id},15,'free')">▶ 15 min Notizen</button>
         <button onclick="startHzRep(${st.id})">🟦 Horizon ${HZ_QN} Fragen</button>
         ${loKeys(st.id).length?`<button onclick="startMicroRep(${st.id})">⚡ Mikro-Rep</button>`:''}
@@ -5488,9 +5494,9 @@ function festigenHintHTML(){
   if(!list.length) return '';
   return list.map(o=>{ const st=ALL99.find(x=>x.id===o.id); if(!st) return '';
     return `<div class="fest-hint">
-      <div style="flex:1;min-width:180px"><b>🧠 Festigen:</b> Gestern hast du <b>#${st.id} ${st.t}</b> gelernt (${o.h}h). 15–25 min Wiederholen heute verankert es im Langzeitgedächtnis.</div>
+      <div style="flex:1;min-width:180px"><b>🧠 Festigen:</b> Gestern hast du <b>#${st.id} ${st.t}</b> gelernt (${o.h}h). 20–45 min Wiederholen heute verankert es im Langzeitgedächtnis.</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap">
-        <button onclick="startExtraRep(${st.id},25,'atplq')" style="font-size:11px;padding:3px 9px">▶ 25 min ATPL_Q</button>
+        <button onclick="startExtraRep(${st.id},45,'atplq')" style="font-size:11px;padding:3px 9px">▶ 45 min ATPL_Q</button>
         <button onclick="startExtraRep(${st.id},15,'free')" style="font-size:11px;padding:3px 9px">▶ 15 min Notizen</button>
         <button onclick="startHzRep(${st.id})" style="font-size:11px;padding:3px 9px">🟦 Horizon ${HZ_QN} Fragen</button>
         ${loKeys(st.id).length?`<button onclick="startMicroRep(${st.id})" style="font-size:11px;padding:3px 9px">⚡ Mikro-Rep</button>`:''}
@@ -5632,8 +5638,8 @@ function showExtraRep(preId){
     <div id="xr-sel"></div>
     <div style="font-size:12px;font-weight:600;margin:8px 0 6px">Wie?</div>
     <div class="xr-grid">
-      <button onclick="xrGo(25,'atplq')">▶ 25 min ATPL_Q<br><span>Timer · danach Score</span></button>
-      <button onclick="xrGo(50,'atplq')">▶ 50 min ATPL_Q<br><span>Timer · danach Score</span></button>
+      <button onclick="xrGo(45,'atplq')">▶ 45 min ATPL_Q<br><span>Timer läuft weiter · Fertig drücken</span></button>
+      <button onclick="xrGo(60,'atplq')">▶ 60 min ATPL_Q<br><span>Timer läuft weiter · Fertig drücken</span></button>
       <button onclick="xrGo(15,'free')">▶ 15 min Notizen<br><span>Büchlein / Feynman</span></button>
       <button onclick="const i=xrId(); if(i) startHzRep(i)">🟦 Horizon-Kurzrep<br><span>${HZ_QN} Fragen · ${HZ_MINS} min</span></button>
       <button onclick="xrMicro()">⚡ Mikro-Rep<br><span>5 Lernziele · 5 min</span></button>
