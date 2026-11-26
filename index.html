@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v76</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v77</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v76</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v77</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2297,7 +2297,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=76;
+const APP_VERSION=77;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -5310,7 +5310,7 @@ function mcqHTML(k,o){
   const btn=(t,i)=>{ let st='text-align:left;font-size:12.5px;padding:7px 10px;width:100%;display:flex;gap:8px;align-items:flex-start;';
     if(p!=null){ if(i===ok) st+='background:rgba(22,163,74,.18);border-color:#16a34a;color:#86efac;'; else if(i===p) st+='background:rgba(220,38,38,.18);border-color:#dc2626;color:#fca5a5;'; else st+='opacity:.55;'; }
     return `<button ${p!=null?'disabled':''} onclick="mcqPick('${k}',${i})" style="${st}"><b>${L[i]}</b><span>${loEsc(t)}</span></button>`; };
-  let h=`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px">${opts.map(btn).join('')}</div>`;
+  let h=(c[5]?`<div style="max-width:260px">${c[5]}</div>`:'')+`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px">${opts.map(btn).join('')}</div>`;
   if(p!=null){
     h+=`<div style="font-size:12.5px;background:var(--bg3);border-left:3px solid ${p===ok?'#16a34a':'#dc2626'};border-radius:6px;padding:8px 10px;margin-bottom:8px"><b>${p===ok?'✅ Correct':'❌ Wrong – correct is '+L[ok]}</b><div style="margin-top:4px">${cardAnsHTML(c[2])}</div></div>${cardAbbrHTML(c[1]+' '+opts.join(' '),c[2])}`;
     if(p===ok) h+=`<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:11px;color:var(--text3)">Was it</span><button onclick="microAns('${k}','sure')" style="font-size:11px;padding:3px 9px;${MR.ans[k]==='sure'?'background:#16a34a;color:#fff;border-color:#16a34a':''}">✅ knew it</button><button onclick="microAns('${k}','shaky')" style="font-size:11px;padding:3px 9px;${MR.ans[k]==='shaky'?'background:#ca8a04;color:#fff;border-color:#ca8a04':''}">〰️ guessed</button></div>`;
