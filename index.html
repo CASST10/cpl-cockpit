@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v60</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v61</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v60</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v61</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2297,7 +2297,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=60;
+const APP_VERSION=61;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -5288,6 +5288,18 @@ let MR=null;
 // v59: laufende Mikro-Rep überlebt App-Neustart/Wechsel (lokal pro Gerät), Pille zum Zurückkehren
 function _mrSave(){ try{ if(MR) localStorage.setItem('cpl_mr',JSON.stringify({at:Date.now(),MR:MR},(k,v)=>k==='due'?undefined:v)); else localStorage.removeItem('cpl_mr'); }catch(e){} }
 function _mrRestore(){ try{ const o=JSON.parse(localStorage.getItem('cpl_mr')||'null'); if(o&&o.MR&&Date.now()-o.at<36*3600*1000&&!MR){ MR=o.MR; } else if(o&&!MR) localStorage.removeItem('cpl_mr'); }catch(e){} updMrPill(); }
+// Aktive Zeit: zählt nur, solange das Fenster offen + sichtbar ist und in den letzten 2 Min etwas angetippt wurde
+// (Handy gesperrt, Bus-Wechsel, App im Hintergrund, Pause → keine Lernzeit)
+let _mrInt=null,_mrLastInt=0;
+function _mrStartClock(){
+  _mrLastInt=Date.now(); if(_mrInt) return;
+  _mrInt=setInterval(()=>{
+    if(!MR){ clearInterval(_mrInt); _mrInt=null; return; }
+    if(!document.getElementById('micro-modal')||document.visibilityState!=='visible') return;
+    if(Date.now()-_mrLastInt<=120000){ MR.act=(MR.act||0)+5; if(MR.act%30===0) _mrSave(); }
+  },5000);
+}
+document.addEventListener('visibilitychange',()=>{ if(MR&&document.visibilityState==='hidden') _mrSave(); });
 function mrHide(){ document.getElementById('micro-modal')?.remove(); _mrSave(); updMrPill(); }
 function mrCancel(){ MR=null; document.getElementById('micro-modal')?.remove(); _mrSave(); updMrPill(); }
 function updMrPill(){
@@ -5414,7 +5426,7 @@ function startMicroRep(stageId){
   if(sel.length>=3){
     const cnt={}; sel.forEach(o=>cnt[o.id]=(cnt[o.id]||0)+1);
     const main=+Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0][0];
-    MR={id:main,mixed:false,keys:sel.map(o=>o.k),cards:Object.fromEntries(sel.map(o=>[o.k,o])),show:{},ans:{},t0:Date.now()};
+    MR={id:main,mixed:false,keys:sel.map(o=>o.k),cards:Object.fromEntries(sel.map(o=>[o.k,o])),show:{},ans:{},act:0,t0:Date.now()};
     renderMicroRep(); return;
   }
   let id=stageId;
@@ -5428,7 +5440,7 @@ function startMicroRep(stageId){
   // bevorzugt: wackelig/weiss nicht → nie bewertet → sicher (älteste zuerst)
   const rank=k=>{ const c=conf[id+'|'+k]; return c?(c.v==='no'?0:c.v==='shaky'?1:3+(c.date||'').localeCompare('')*0):2; };
   const pick=keys.map(k=>({k,r:rank(k)+Math.random()})).sort((a,b)=>a.r-b.r).slice(0,5).map(o=>o.k);
-  MR={id,keys:pick,ans:{},t0:Date.now()};
+  MR={id,keys:pick,ans:{},act:0,t0:Date.now()};
   renderMicroRep();
 }
 function loText(id,key){
@@ -5469,6 +5481,8 @@ function renderMicroRep(){
       <button class="primary" ${done?'':'disabled style="opacity:.5"'} onclick="finishMicroRep()">✓ Fertig</button>
     </div></div>`;
   document.body.appendChild(ov);
+  ov.addEventListener('pointerdown',()=>{ _mrLastInt=Date.now(); });
+  _mrStartClock();
   _mrSave(); updMrPill();
 }
 function microAns(k,v){ MR.ans[k]=v; renderMicroRep(); }
@@ -5482,13 +5496,13 @@ function finishMicroRep(){
     Object.entries(byLo).forEach(([lk,v])=>{ S.loConf[lk]={v,date:tk,t:Date.now()}; });
     MR.loWeak=Object.entries(byLo).filter(([lk,v])=>v!=='sure'&&+lk.split('|')[0]===MR.id).map(([lk])=>lk.split('|')[1]);
   } else Object.entries(MR.ans).forEach(([k,v])=>{ S.loConf[MR.id+'|'+k]={v,date:tk,t:Date.now()}; });
-  const mins=Math.max(1,Math.min(15,Math.round((Date.now()-MR.t0)/60000)||5));
+  const act=MR.act||0; const mins=Math.max(1,Math.min(30,Math.round(act/60)));   // nur aktive Zeit
   const st=ALL99.find(x=>x.id===MR.id);
   const weak=MR.cards?MR.loWeak:MR.keys.filter(k=>MR.ans[k]!=='sure');
   const id=MR.id; const sure=MR.keys.filter(k=>MR.ans[k]==='sure').length;
   MR=null; _mrSave(); updMrPill();
   document.getElementById('micro-modal')?.remove();
-  _addTypedBlock(`⚡ Mikro-Rep: ${st?st.t:''} (${sure}/5 sicher)`,id,Math.max(5,mins),'rep');
+  _addTypedBlock(`⚡ Mikro-Rep: ${st?st.t:''} (${sure}/5 sicher · ${mins} min aktiv)`,id,mins,'rep');
   showMicroResult(id,weak,sure);
 }
 function microQuizPrompt(id,weak){
