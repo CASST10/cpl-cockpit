@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v113</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v114</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v113</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v114</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2297,7 +2297,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=113;
+const APP_VERSION=114;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -2457,6 +2457,7 @@ function mergeStates(local, remote){
   const stt={}; [sec.stageTests||{},prim.stageTests||{}].forEach(o=>Object.entries(o).forEach(([id,arr])=>{ stt[id]=_unionById((stt[id]||[]).map(x=>Object.assign({id:x.t},x)),(arr||[]).map(x=>Object.assign({id:x.t},x)),del).map(x=>{ const y=Object.assign({},x); delete y.id; return y; }).sort((a,b)=>a.t-b.t); }));
   M.stageTests=stt;
   const lc=Object.assign({},sec.loConf||{}); Object.entries(prim.loConf||{}).forEach(([k,x])=>{ if(!lc[k]||(x.t||0)>=(lc[k].t||0)) lc[k]=x; }); M.loConf=lc;
+  { const a=local.mrRun,b=remote.mrRun; M.mrRun=!a?b:!b?a:((b.t||0)>(a.t||0)?b:a); if(!M.mrRun) delete M.mrRun; }
   const csr=Object.assign({},sec.cardSR||{}); Object.entries(prim.cardSR||{}).forEach(([k,x])=>{ if(!csr[k]||(x.t||0)>=(csr[k].t||0)) csr[k]=x; }); M.cardSR=csr;
   // Lernziele: Vereinigung, Abhaken/Entfernen per Zeitstempel
   const loT=Object.assign({},sec._loT||{});
@@ -2500,6 +2501,7 @@ async function gistLoad(given){
       const merged=Object.assign(mergeStates(S,remote),keepLocal);
       const needPush=_contentSig(merged)!==_contentSig(remote);
       S=merged;
+      try{ _mrAdopt(); }catch(e){}
       if(needPush){ if(_saveTimer) clearTimeout(_saveTimer); _saveTimer=setTimeout(()=>gistSave(),800); }
     }
     syncStatus='ok';
@@ -2529,6 +2531,7 @@ async function gistSave(){
         const _sigBefore=_contentSig(S);
         S=Object.assign(mergeStates(S,remote),keepLocal);
         _saveMergedChange=_contentSig(S)!==_sigBefore;
+        try{ _mrAdopt(); }catch(e){}
         S._savedAt=Date.now();
         try{ initHours(); recalcAllHours(); }catch(e){}
         localStorage.setItem('cpl_cockpit_v5',JSON.stringify(S));
@@ -5327,8 +5330,34 @@ function mcqHTML(k,o){
 function mcqPick(k,i){ if(!MR) return; MR.pick=MR.pick||{}; if(MR.pick[k]!=null) return; MR.pick[k]=i; const o=MR.cards[k]; MR.ans[k]=(i===o.c[4])?'sure':'no'; renderMicroRep(); }
 let MR=null;
 // v59: laufende Mikro-Rep überlebt App-Neustart/Wechsel (lokal pro Gerät), Pille zum Zurückkehren
-function _mrSave(){ try{ if(MR) localStorage.setItem('cpl_mr',JSON.stringify({at:Date.now(),MR:MR},(k,v)=>k==='due'?undefined:v)); else localStorage.removeItem('cpl_mr'); }catch(e){} }
-function _mrRestore(){ try{ const o=JSON.parse(localStorage.getItem('cpl_mr')||'null'); if(o&&o.MR&&Date.now()-o.at<36*3600*1000&&!MR){ MR=o.MR; } else if(o&&!MR) localStorage.removeItem('cpl_mr'); }catch(e){} updMrPill(); }
+// v114: laufende Mikro-Rep wird zusätzlich über den Gist synchronisiert (S.mrRun) → auf dem Handy weitermachen, was am Laptop begonnen wurde
+let _mrT=0, _mrSig='';
+function _mrClean(m){ return m?JSON.parse(JSON.stringify(m,(k,v)=>k==='due'?undefined:v)):null; }
+function _mrSigOf(m){ if(!m) return 'null'; const c=Object.assign({},_mrClean(m)); delete c.act; return JSON.stringify(c); }
+function _mrSave(sync=true,force=false){
+  try{ if(MR) localStorage.setItem('cpl_mr',JSON.stringify({at:Date.now(),t:_mrT,MR:MR},(k,v)=>k==='due'?undefined:v)); else localStorage.removeItem('cpl_mr'); }catch(e){}
+  if(!sync) return;
+  const sig=_mrSigOf(MR);
+  if(!force&&sig===_mrSig) return;          // nichts Neues → kein Upload (verhindert Ping-Pong zwischen Geräten)
+  if(!MR&&!S.mrRun) { _mrSig=sig; return; }
+  _mrSig=sig; _mrT=Date.now();
+  S.mrRun={t:_mrT,MR:_mrClean(MR)};
+  try{ localStorage.setItem('cpl_mr',MR?JSON.stringify({at:Date.now(),t:_mrT,MR:_mrClean(MR)}):''); if(!MR) localStorage.removeItem('cpl_mr'); }catch(e){}
+  saveState();
+}
+function _mrRestore(){ try{ const o=JSON.parse(localStorage.getItem('cpl_mr')||'null'); if(o&&o.MR&&Date.now()-o.at<36*3600*1000&&!MR){ MR=o.MR; _mrT=Math.max(_mrT,o.t||0); _mrSig=_mrSigOf(MR); } else if(o&&!MR) localStorage.removeItem('cpl_mr'); }catch(e){} _mrAdopt(); updMrPill(); }
+// Stand vom anderen Gerät übernehmen, wenn er neuer ist
+function _mrAdopt(){
+  const r=S.mrRun; if(!r||!r.t||r.t<=_mrT) return;
+  _mrT=r.t;
+  const m=(r.MR&&Date.now()-r.t<36*3600*1000)?JSON.parse(JSON.stringify(r.MR)):null;
+  const had=!!MR, open=!!document.getElementById('micro-modal');
+  MR=m; _mrSig=_mrSigOf(MR);
+  try{ if(MR) localStorage.setItem('cpl_mr',JSON.stringify({at:Date.now(),t:_mrT,MR:MR})); else localStorage.removeItem('cpl_mr'); }catch(e){}
+  if(open){ if(MR) renderMicroRep(); else document.getElementById('micro-modal')?.remove(); }
+  else if(MR&&!had){ try{ _toast('⚡ Mikro-Rep vom anderen Gerät — unten links weitermachen'); }catch(e){} }
+  updMrPill();
+}
 // Aktive Zeit: zählt nur, solange das Fenster offen + sichtbar ist und in den letzten 2 Min etwas angetippt wurde
 // (Handy gesperrt, Bus-Wechsel, App im Hintergrund, Pause → keine Lernzeit)
 let _mrInt=null,_mrLastInt=0;
@@ -5337,11 +5366,11 @@ function _mrStartClock(){
   _mrInt=setInterval(()=>{
     if(!MR){ clearInterval(_mrInt); _mrInt=null; return; }
     if(!document.getElementById('micro-modal')||document.visibilityState!=='visible') return;
-    if(Date.now()-_mrLastInt<=120000){ MR.act=(MR.act||0)+5; if(MR.act%30===0) _mrSave(); }
+    if(Date.now()-_mrLastInt<=120000){ MR.act=(MR.act||0)+5; if(MR.act%30===0) _mrSave(false); }
   },5000);
 }
-document.addEventListener('visibilitychange',()=>{ if(MR&&document.visibilityState==='hidden') _mrSave(); });
-function mrHide(){ document.getElementById('micro-modal')?.remove(); _mrSave(); updMrPill(); }
+document.addEventListener('visibilitychange',()=>{ if(MR&&document.visibilityState==='hidden'){ _mrSave(true,true); if(_saveTimer){ clearTimeout(_saveTimer); _saveTimer=null; } try{ gistSave(); }catch(e){} } });
+function mrHide(){ document.getElementById('micro-modal')?.remove(); _mrSave(true,true); updMrPill(); }
 function mrCancel(){ MR=null; document.getElementById('micro-modal')?.remove(); _mrSave(); updMrPill(); }
 function updMrPill(){
   let el=document.getElementById('mr-pill'); const open=!!document.getElementById('micro-modal');
