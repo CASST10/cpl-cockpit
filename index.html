@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v54</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v55</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v54</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v55</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2296,7 +2296,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=54;
+const APP_VERSION=55;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -3697,20 +3697,14 @@ function renderDash(st){
     {lb:'1. Stage',t:1},{lb:'10 fertig',t:10},{lb:'25%',t:25},
     {lb:'Halbzeit',t:50},{lb:'75%',t:75},{lb:'Alle 99',t:99}
   ];
-  let h=monBanner+banner+`<div style="font-size:13px;color:var(--text2);text-align:center;padding:.5rem 0 1.25rem;font-style:italic">${motto}</div>
+  let h=monBanner+banner+`<div style="font-size:13px;color:var(--text2);text-align:center;padding:.5rem 0 1rem;font-style:italic">${motto}</div>
+  ${todayPlanHTML(true)}
   <div class="grid4">
     <div class="card"><div class="card-label">Fertig</div><div class="card-value" style="color:var(--green)">${st.done}</div><div class="card-sub">von 99 Stages</div></div>
     <div class="card"><div class="card-label">Gelernt</div><div class="card-value">${st.th}h</div><div class="card-sub">Ø ${st.avg}h / Stage</div></div>
     <div class="card"><div class="card-label">Streak</div><div class="card-value" style="color:var(--amber)">${streak}</div><div class="card-sub">Tage aktiv</div></div>`;
-  const _rd=repDayLine(); const _rod=repOfTheDay();
-  if(_rd.q.length||_rd.todo) h+=`<div style="background:${_rd.todo?'var(--blue-bg)':'var(--green-bg)'};border:1px solid ${_rd.todo?'#1A3A80':'var(--green-dim)'};border-radius:var(--radius);padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;cursor:pointer" onclick="${_rod?`markRepDone(${_rod.s.id},0)`:`S.tab='training';S_sub='rep';render()`}">
-    <span style="font-size:20px">🔁</span>
-    <div><div style="font-weight:600;color:${_rd.todo?'#60A5FA':'var(--green)'}">${_rd.html}</div><div style="font-size:12px;color:var(--text2)">${_rd.todo?'Klicken → ATPL_Q & Score eintragen'+(_rd.bonus>0?` · ${_rd.bonus} weitere warten (optional)`:''):'Klicken für die Rep-Übersicht'}</div></div>
-    <span style="margin-left:auto;color:var(--text2)">→</span>
-  </div>`;
   h+=`
     <div class="card"><div class="card-label">Deadline</div><div class="card-value" style="color:${ddl<20?'var(--red)':'var(--text)'}">${ddl}</div><div class="card-sub">Tage bis ${DEADLINE_LBL}</div></div>
-    ${dashTodayPanelHTML()}
   </div>
   ${tempoCheckHTML()}
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
@@ -4069,7 +4063,7 @@ function renderToday(){
       <button onclick="showDayEnd()" style="font-size:12px;padding:6px 10px;background:var(--blue-bg);border-color:#1A3A80;color:#60A5FA">🌙 Abschluss</button>
     </div>
   </div>
-  `+achievementsHTML()+timeBarsHTML()+`
+  `+todayPlanHTML(false)+achievementsHTML()+timeBarsHTML()+`
 
   <div class="raised">
     <div class="sec" style="margin-top:0">📚 Pomodoro Stage (50min → auf Stage angerechnet)</div>
@@ -4086,7 +4080,6 @@ function renderToday(){
       <span style="font-size:12px;color:var(--text2)">min</span>
       <button onclick="addCustomBlock()">+</button>
     </div>
-    ${festigenHintHTML()}
     <div class="sec">🔁 Repetition (1 pro Tag) <button onclick="showExtraRep()" style="font-size:10.5px;padding:2px 8px;margin-left:6px;background:#132a26;border-color:#1f5a4f;color:#2DD4BF">🧠 Extra-Rep</button></div>
     <div class="row wrap" style="gap:5px;margin-bottom:10px;align-items:center">
       ${(()=>{const d=repOfTheDay(); const q=repQueue(); const rd=repDayLine();
@@ -5461,6 +5454,60 @@ function extraDoneToday(id){
   return ((S.repLog||{})[id]||[]).some(x=>x.date===tk)||blocksForDate(todayStr()).some(b=>b.stageId===id&&b.type==='rep');
 }
 // Dashboard: Festigen-Vorschlag + Mini-"Heute geleistet" im freien Platz neben der Deadline-Karte
+// ── v55: "Heute auf dem Plan" – ein Panel: 1) Rep des Tages 2) Festigen 3) Neuer Stoff ──
+function todayPlanHTML(withStats){
+  const tk=_keyOf(new Date()), y=_keyOf(_addDays(new Date(),-1));
+  const A=dayAchievements(tk);
+  const rod=repOfTheDay(), q=repQueue();
+  const repDone=!rod&&repsDoneOn(tk)>=REPS_PER_DAY;
+  const festAll=stagesLearnedOn(y).filter(o=>o.h>=0.4);
+  const festOpen=festAll.filter(o=>!extraDoneToday(o.id));
+  const next=(S.activeId&&!isDone(S.activeId)&&ALL99.find(x=>x.id===S.activeId))||ALL99.find(x=>!isDone(x.id));
+  const nextH=next?r((S.dayBlocks||[]).filter(b=>b.stageId===next.id&&b.type!=='org').reduce((a,b)=>a+b.hours,0)):0;
+  const btn='font-size:12px;padding:5px 11px';
+  const row=(done,ico,title,body,btns)=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid #2a2f45">
+      <div style="font-size:18px;width:26px;text-align:center;line-height:1.3">${done?'✅':ico}</div>
+      <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px;${done?'color:var(--green)':''}">${title}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">${body}</div>
+        ${btns?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${btns}</div>`:''}</div></div>`;
+  // 1) Rep des Tages
+  let r1;
+  if(rod){
+    const st=rod.s, rp=rod.rp, label=repKindLabel(rp)+(rp.retry?' · Wiederholung':'');
+    r1=row(false,'🎯','Rep des Tages',`<b>#${st.id} ${st.t}</b> · ${label}${rp.lastFail!=null?` · letztes Mal <b style="color:var(--red)">${rp.lastFail}%</b>`:''}${q.length>1?` · ${q.length-1} weitere als Bonus`:''}`,
+      `<button class="primary" style="${btn}" onclick="repStartTimer(${st.id},${rp.iv},45)">▶ 45 min Timer</button>
+       <button style="${btn}" onclick="showPodcastPrompt(${st.id},${rp.iv})">🎧 Podcast</button>
+       <button style="${btn}" onclick="markRepDone(${st.id},${rp.iv})">🎯 Score eintragen</button>`);
+  } else r1=row(repDone,'🎯','Rep des Tages',repDone?`Erledigt${q.length?` · ${q.length} Bonus-Reps möglich (Heute-Tab)`:''}`:'Heute ist keine Rep fällig.','');
+  // 2) Festigen
+  let r2;
+  if(festOpen.length){
+    const o=festOpen[0], st=ALL99.find(x=>x.id===o.id);
+    r2=row(false,'🧠','Festigen von gestern',`<b>#${st.id} ${st.t}</b> (${o.h}h gelernt)${festOpen.length>1?` · +${festOpen.length-1} weitere`:''}`,
+      `<button class="primary" style="${btn}" onclick="startExtraRep(${st.id},45,'atplq')">▶ 45 min ATPL_Q</button>
+       <button style="${btn}" onclick="showPodcastPrompt(${st.id})">🎧 Podcast</button>
+       ${loKeys(st.id).length?`<button style="${btn}" onclick="startMicroRep(${st.id})">⚡ Mikro-Rep</button>`:''}
+       <button style="${btn}" onclick="startHzRep(${st.id})">🟦 Horizon</button>`);
+  } else r2=row(festAll.length>0,'🧠','Festigen von gestern',festAll.length?'Gestriger Stoff ist heute schon wiederholt.':'Gestern nichts gelernt – freiwillig jederzeit möglich.',festAll.length?'':`<button style="${btn}" onclick="showExtraRep()">🧠 Extra-Rep</button>`);
+  // 3) Neuer Stoff
+  const r3=next?row(A.stagesDone.length>0&&!next,'📚','Neuer Stoff',`<b>#${next.id} ${next.t}</b>${nextH>0?` · heute schon ${nextH}h`:''}`,
+      `<button class="primary" style="${btn};font-weight:700" onclick="quickStart()">▶ Jetzt starten</button>
+       ${STAGE_NLM[next.id]?`<button style="${btn}" onclick="copyNLM(${next.id})">📋 NotebookLM</button>`:''}`):row(true,'📚','Neuer Stoff','Alle 99 Stages fertig! 🎉','');
+  const doneN=(repDone||(!rod))?1:0, tot=2;
+  const nDone=(repDone||!rod?1:0)+((festAll.length&&!festOpen.length)||!festAll.length?1:0);
+  const stat=(v,l,c)=>`<div class="dtp-stat"><div style="color:${c}">${v}</div><span>${l}</span></div>`;
+  return `<div class="card" style="margin-bottom:14px;border-color:#2c3a66">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+      <div style="font-size:14px;font-weight:700;flex:1">☀ Heute auf dem Plan</div>
+      <span style="font-size:11px;color:${nDone>=2?'var(--green)':'var(--text3)'}">Wiederholung: ${nDone}/2 erledigt</span>
+    </div>
+    ${r1}${r2}${r3}
+    ${withStats?`<div class="dtp-row" style="border-top:1px solid #2a2f45;padding-top:10px;margin-top:2px">
+      <span class="card-label" style="margin:0">Heute</span>
+      ${stat(A.learnH+'h','Lernzeit','var(--blue)')}${stat(A.stagesDone.length,'Stages fertig','var(--green)')}${stat(A.lo,'Lernziele','#2DD4BF')}${stat(A.focus,'Fokus-Blöcke','#F87171')}
+      <button onclick="S.tab='today';render()" style="font-size:11px;padding:3px 9px;margin-left:auto">Details →</button></div>`:''}
+  </div>`;
+}
 function dashTodayPanelHTML(){
   const A=dayAchievements(_keyOf(new Date()));
   const rodOpen=!!repOfTheDay();
