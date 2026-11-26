@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v57</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v58</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v57</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v58</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2297,7 +2297,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=57;
+const APP_VERSION=58;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -2457,6 +2457,7 @@ function mergeStates(local, remote){
   const stt={}; [sec.stageTests||{},prim.stageTests||{}].forEach(o=>Object.entries(o).forEach(([id,arr])=>{ stt[id]=_unionById((stt[id]||[]).map(x=>Object.assign({id:x.t},x)),(arr||[]).map(x=>Object.assign({id:x.t},x)),del).map(x=>{ const y=Object.assign({},x); delete y.id; return y; }).sort((a,b)=>a.t-b.t); }));
   M.stageTests=stt;
   const lc=Object.assign({},sec.loConf||{}); Object.entries(prim.loConf||{}).forEach(([k,x])=>{ if(!lc[k]||(x.t||0)>=(lc[k].t||0)) lc[k]=x; }); M.loConf=lc;
+  const csr=Object.assign({},sec.cardSR||{}); Object.entries(prim.cardSR||{}).forEach(([k,x])=>{ if(!csr[k]||(x.t||0)>=(csr[k].t||0)) csr[k]=x; }); M.cardSR=csr;
   // Lernziele: Vereinigung, Abhaken/Entfernen per Zeitstempel
   const loT=Object.assign({},sec._loT||{});
   Object.entries(prim._loT||{}).forEach(([k,x])=>{ if(!loT[k]||x.t>=loT[k].t) loT[k]=x; });
@@ -5349,7 +5350,57 @@ function showPodcastPrompt(id,iv){
   document.body.appendChild(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
 }
+// ── v58: Karteikarten-Zeitplan (Spaced Repetition, SM-2/Leitner-artig) ─────────────────────
+// Karten kommen, wenn sie fällig sind (Intervalle wachsen bei Erfolg, springen bei Fehlern auf 1 Tag zurück),
+// gemischt über mehrere Stages (Interleaving), höchstens 3 neue Karten pro Runde.
+function _cardKey(id,c){ let h=5381; const t=c[1]; for(let i=0;i<t.length;i++) h=((h<<5)+h+t.charCodeAt(i))|0; return id+'|'+(h>>>0).toString(36); }
+function _srUpdate(key,v,tk){
+  if(!S.cardSR) S.cardSR={};
+  const x=Object.assign({iv:0,ef:2.5,n:0,l:0},S.cardSR[key]||{});
+  let iv;
+  if(v==='sure'){ iv=x.n===0?3:x.n===1?7:Math.round((x.iv||7)*x.ef); x.n++; x.ef=Math.min(3,x.ef+0.05); }
+  else if(v==='shaky'){ iv=Math.max(1,Math.round((x.iv||2)*0.6)); x.ef=Math.max(1.3,x.ef-0.15); }
+  else { iv=1; x.n=0; x.l=(x.l||0)+1; x.ef=Math.max(1.3,x.ef-0.2); }
+  iv=Math.min(iv,60);
+  let due=_addDays(_fromKey(tk),iv); if(typeof REVIEW_END!=='undefined'&&REVIEW_END&&due>REVIEW_END) due=REVIEW_END;
+  x.iv=iv; x.d=_keyOf(due); x.last=tk; x.t=Date.now(); S.cardSR[key]=x;
+}
+function _cardPool(onlyId){
+  const today=new Date(); today.setHours(0,0,0,0); const out=[];
+  Object.entries(window.STAGE_CARDS||{}).forEach(([sid,cards])=>{
+    const id=+sid; if(onlyId&&id!==onlyId) return; if(!isDone(id)) return;
+    const base=repBaseDate(id)||today;
+    cards.forEach(c=>{
+      const key=_cardKey(id,c), st=(S.cardSR||{})[key];
+      const due=st?_fromKey(st.d):_addDays(base,1);
+      const over=Math.round((today-due)/86400000);
+      out.push({k:'c'+id+'_'+key.split('|')[1],id,c,key,isNew:!st,due,over,iv:st?st.iv:1,lapses:st?st.l||0:0});
+    });
+  });
+  return out;
+}
+function cardsDueCount(){ return _cardPool(0).filter(o=>o.over>=0).length; }
+function _pickCards(onlyId,n){
+  const pool=_cardPool(onlyId); if(!pool.length) return [];
+  const prio=o=>(o.isNew?0.5:o.over/Math.max(1,o.iv))+(o.lapses?0.3:0)+Math.random()*0.15;
+  const due=pool.filter(o=>o.over>=0).sort((a,b)=>prio(b)-prio(a));
+  const picked=[]; let newN=0;
+  for(const o of due){ if(picked.length>=n) break; if(o.isNew&&newN>=3) continue; if(o.isNew) newN++; picked.push(o); }
+  if(picked.length<n){
+    pool.filter(o=>!picked.includes(o)).sort((a,b)=>b.over-a.over).slice(0,n-picked.length).forEach(o=>{ o.early=true; picked.push(o); });
+  }
+  const res=[], rest=picked.slice();
+  while(rest.length){ let i=rest.findIndex(o=>!(res.length>=2&&res[res.length-1].id===o.id&&res[res.length-2].id===o.id)); if(i<0) i=0; res.push(rest.splice(i,1)[0]); }
+  return res;
+}
 function startMicroRep(stageId){
+  const sel=_pickCards(stageId||0,5);
+  if(sel.length>=3){
+    const cnt={}; sel.forEach(o=>cnt[o.id]=(cnt[o.id]||0)+1);
+    const main=+Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0][0];
+    MR={id:main,mixed:!stageId&&Object.keys(cnt).length>1,keys:sel.map(o=>o.k),cards:Object.fromEntries(sel.map(o=>[o.k,o])),show:{},ans:{},t0:Date.now()};
+    renderMicroRep(); return;
+  }
   let id=stageId;
   if(!id){
     const cand=ALL99.filter(x=>isDone(x.id)&&loKeys(x.id).length).map(x=>{ const sc=lastRepScore(x.id); const conf=Object.entries(S.loConf||{}).filter(([k])=>k.startsWith(x.id+'|'));
@@ -5358,13 +5409,6 @@ function startMicroRep(stageId){
     id=cand[0].x.id;
   }
   const keys=loKeys(id); const conf=S.loConf||{};
-  const CD=(window.STAGE_CARDS||{})[id];
-  if(CD&&CD.length>=3){   // v56: Karteikarten-Modus (Frage → Antwort zeigen → bewerten)
-    const rk=c=>{ const x=conf[id+'|'+c[0]]; return (x?(x.v==='no'?0:x.v==='shaky'?1:3):2)+Math.random()*1.5; };
-    const ch=CD.map((c,i)=>({c,i,r:rk(c)})).sort((a,b)=>a.r-b.r).slice(0,5);
-    MR={id,keys:ch.map(o=>'c'+o.i),cards:Object.fromEntries(ch.map(o=>['c'+o.i,o.c])),show:{},ans:{},t0:Date.now()};
-    renderMicroRep(); return;
-  }
   // bevorzugt: wackelig/weiss nicht → nie bewertet → sicher (älteste zuerst)
   const rank=k=>{ const c=conf[id+'|'+k]; return c?(c.v==='no'?0:c.v==='shaky'?1:3+(c.date||'').localeCompare('')*0):2; };
   const pick=keys.map(k=>({k,r:rank(k)+Math.random()})).sort((a,b)=>a.r-b.r).slice(0,5).map(o=>o.k);
@@ -5388,10 +5432,11 @@ function renderMicroRep(){
   const B=(k,v,l,c)=>`<button onclick="microAns('${k}','${v}')" style="font-size:11px;padding:3px 9px;${MR.ans[k]===v?`background:${c};color:#fff;border-color:${c}`:''}">${l}</button>`;
   ov.innerHTML=`<div class="modal-box" style="max-width:560px;max-height:88vh;overflow:auto">
     <div class="modal-title">⚡ Mikro-Rep (5 min)</div>
-    <div style="font-size:13px;font-weight:600;margin-bottom:2px">#${st.id} ${st.t}</div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:2px">${MR.mixed?'Gemischt aus '+new Set(Object.values(MR.cards||{}).map(o=>o.id)).size+' Stages':'#'+st.id+' '+st.t}${MR.cards?` <span style="font-weight:400;font-size:11px;color:var(--text3)">· ${cardsDueCount()} Karten fällig</span>`:''}</div>
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${MR.cards?'Antwort erst im Kopf formulieren, dann aufdecken und ehrlich bewerten.':'Erklär dir jedes Lernziel kurz im Kopf — dann ehrlich einschätzen.'}</div>
-    ${MR.cards?MR.keys.map((k,i)=>{ const c=MR.cards[k]; return `<div class="mr-lo">
-      <div style="font-size:10px;color:var(--text3)">${loEsc(c[0].split(':')[0])} · ${loEsc(loTitle(MR.id,c[0]))}</div>
+    ${MR.cards?MR.keys.map((k,i)=>{ const o=MR.cards[k], c=o.c; const tag=o.isNew?'🆕 neu':o.early?'⏩ vorzeitig':`⏰ fällig${o.over>0?' seit '+o.over+' T':''}${o.lapses?' · '+o.lapses+'× vergessen':''}`;
+      return `<div class="mr-lo">
+      <div style="font-size:10px;color:var(--text3)">#${o.id} · ${loEsc(loTitle(o.id,c[0]))} · ${tag}</div>
       <div style="font-size:13px;font-weight:600;margin:3px 0 8px">${i+1}. ${loEsc(c[1])}</div>
       ${MR.show[k]?`<div style="font-size:12.5px;background:var(--bg3);border-left:3px solid var(--blue);border-radius:6px;padding:8px 10px;margin-bottom:8px">${loEsc(c[2])}</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap"><span style="font-size:11px;color:var(--text3);align-self:center">Gewusst?</span>${B(k,'sure','✅ ja','#16a34a')}${B(k,'shaky','〰️ teils','#ca8a04')}${B(k,'no','❌ nein','#dc2626')}</div>`
@@ -5413,11 +5458,11 @@ function finishMicroRep(){
   if(!MR) return;
   if(!S.loConf) S.loConf={};
   const tk=_keyOf(new Date());
-  if(MR.cards){   // pro Lernziel zählt die schlechteste Bewertung der Karten
+  if(MR.cards){   // Zeitplan pro Karte + pro Lernziel zählt die schlechteste Bewertung
     const W={no:0,shaky:1,sure:2}, byLo={};
-    Object.entries(MR.ans).forEach(([k,v])=>{ const lo=MR.cards[k][0]; if(!(lo in byLo)||W[v]<W[byLo[lo]]) byLo[lo]=v; });
-    Object.entries(byLo).forEach(([lo,v])=>{ S.loConf[MR.id+'|'+lo]={v,date:tk,t:Date.now()}; });
-    MR.loWeak=Object.entries(byLo).filter(([lo,v])=>v!=='sure').map(([lo])=>lo);
+    Object.entries(MR.ans).forEach(([k,v])=>{ const o=MR.cards[k]; _srUpdate(o.key,v,tk); const lk=o.id+'|'+o.c[0]; if(!(lk in byLo)||W[v]<W[byLo[lk]]) byLo[lk]=v; });
+    Object.entries(byLo).forEach(([lk,v])=>{ S.loConf[lk]={v,date:tk,t:Date.now()}; });
+    MR.loWeak=Object.entries(byLo).filter(([lk,v])=>v!=='sure'&&+lk.split('|')[0]===MR.id).map(([lk])=>lk.split('|')[1]);
   } else Object.entries(MR.ans).forEach(([k,v])=>{ S.loConf[MR.id+'|'+k]={v,date:tk,t:Date.now()}; });
   const mins=Math.max(1,Math.min(15,Math.round((Date.now()-MR.t0)/60000)||5));
   const st=ALL99.find(x=>x.id===MR.id);
@@ -5512,7 +5557,7 @@ function todayPlanHTML(withStats){
   const r3=next?row(A.stagesDone.length>0&&!next,'📚','Neuer Stoff',`<b>#${next.id} ${next.t}</b>${nextH>0?` · heute schon ${nextH}h`:''}`,
       `<button class="primary" style="${btn};font-weight:700" onclick="quickStart()">▶ Jetzt starten</button>
        ${STAGE_NLM[next.id]?`<button style="${btn}" onclick="copyNLM(${next.id})">📋 NotebookLM</button>`:''}`):row(true,'📚','Neuer Stoff','Alle 99 Stages fertig! 🎉','');
-  const doneN=(repDone||(!rod))?1:0, tot=2;
+  const cdue=cardsDueCount();
   const nDone=(repDone||!rod?1:0)+((festAll.length&&!festOpen.length)||!festAll.length?1:0);
   const stat=(v,l,c)=>`<div class="dtp-stat"><div style="color:${c}">${v}</div><span>${l}</span></div>`;
   return `<div class="card" style="margin-bottom:14px;border-color:#2c3a66">
@@ -5520,7 +5565,7 @@ function todayPlanHTML(withStats){
       <div style="font-size:14px;font-weight:700;flex:1">☀ Heute auf dem Plan</div>
       <span style="font-size:11px;color:${nDone>=2?'var(--green)':'var(--text3)'}">Wiederholung: ${nDone}/2 erledigt</span>
     </div>
-    ${r1}${r2}${r3}
+    ${r1}${r2}${cdue?row(false,'⚡','Karteikarten fällig',`<b>${cdue}</b> Karten sind heute dran (nach Vergessenskurve) · 5 Karten ≈ 3 Minuten`,`<button class="primary" style="${btn}" onclick="startMicroRep()">⚡ Mikro-Rep starten</button>`):''}${r3}
     ${withStats?`<div class="dtp-row" style="border-top:1px solid #2a2f45;padding-top:10px;margin-top:2px">
       <span class="card-label" style="margin:0">Heute</span>
       ${stat(A.learnH+'h','Lernzeit','var(--blue)')}${stat(A.stagesDone.length,'Stages fertig','var(--green)')}${stat(A.lo,'Lernziele','#2DD4BF')}${stat(A.focus,'Fokus-Blöcke','#F87171')}
