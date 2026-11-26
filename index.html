@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v55</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v56</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v55</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v56</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -519,6 +519,7 @@
   <div class="content" id="content"></div>
 </div>
 
+<script src="cards.js"></script>
 <script>
 // ── DATA ──────────────────────────────────────────────────────────
 const FC={
@@ -2296,7 +2297,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=55;
+const APP_VERSION=56;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -5352,11 +5353,18 @@ function startMicroRep(stageId){
   let id=stageId;
   if(!id){
     const cand=ALL99.filter(x=>isDone(x.id)&&loKeys(x.id).length).map(x=>{ const sc=lastRepScore(x.id); const conf=Object.entries(S.loConf||{}).filter(([k])=>k.startsWith(x.id+'|'));
-      const shaky=conf.filter(([k,v])=>v.v!=='sure').length; return {x,p:(sc==null?20:Math.max(0,90-sc))+shaky*5+Math.random()*10}; }).sort((a,b)=>b.p-a.p);
+      const shaky=conf.filter(([k,v])=>v.v!=='sure').length; return {x,p:(sc==null?20:Math.max(0,90-sc))+shaky*5+((window.STAGE_CARDS||{})[x.id]?15:0)+Math.random()*10}; }).sort((a,b)=>b.p-a.p);
     if(!cand.length){ alert('Noch keine abgeschlossenen Stages mit Lernzielen.'); return; }
     id=cand[0].x.id;
   }
   const keys=loKeys(id); const conf=S.loConf||{};
+  const CD=(window.STAGE_CARDS||{})[id];
+  if(CD&&CD.length>=3){   // v56: Karteikarten-Modus (Frage → Antwort zeigen → bewerten)
+    const rk=c=>{ const x=conf[id+'|'+c[0]]; return (x?(x.v==='no'?0:x.v==='shaky'?1:3):2)+Math.random()*1.5; };
+    const ch=CD.map((c,i)=>({c,i,r:rk(c)})).sort((a,b)=>a.r-b.r).slice(0,5);
+    MR={id,keys:ch.map(o=>'c'+o.i),cards:Object.fromEntries(ch.map(o=>['c'+o.i,o.c])),show:{},ans:{},t0:Date.now()};
+    renderMicroRep(); return;
+  }
   // bevorzugt: wackelig/weiss nicht → nie bewertet → sicher (älteste zuerst)
   const rank=k=>{ const c=conf[id+'|'+k]; return c?(c.v==='no'?0:c.v==='shaky'?1:3+(c.date||'').localeCompare('')*0):2; };
   const pick=keys.map(k=>({k,r:rank(k)+Math.random()})).sort((a,b)=>a.r-b.r).slice(0,5).map(o=>o.k);
@@ -5381,8 +5389,14 @@ function renderMicroRep(){
   ov.innerHTML=`<div class="modal-box" style="max-width:560px;max-height:88vh;overflow:auto">
     <div class="modal-title">⚡ Mikro-Rep (5 min)</div>
     <div style="font-size:13px;font-weight:600;margin-bottom:2px">#${st.id} ${st.t}</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Erklär dir jedes Lernziel kurz im Kopf — dann ehrlich einschätzen.</div>
-    ${MR.keys.map((k,i)=>`<div class="mr-lo">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${MR.cards?'Antwort erst im Kopf formulieren, dann aufdecken und ehrlich bewerten.':'Erklär dir jedes Lernziel kurz im Kopf — dann ehrlich einschätzen.'}</div>
+    ${MR.cards?MR.keys.map((k,i)=>{ const c=MR.cards[k]; return `<div class="mr-lo">
+      <div style="font-size:10px;color:var(--text3)">${loEsc(c[0].split(':')[0])} · ${loEsc(loTitle(MR.id,c[0]))}</div>
+      <div style="font-size:13px;font-weight:600;margin:3px 0 8px">${i+1}. ${loEsc(c[1])}</div>
+      ${MR.show[k]?`<div style="font-size:12.5px;background:var(--bg3);border-left:3px solid var(--blue);border-radius:6px;padding:8px 10px;margin-bottom:8px">${loEsc(c[2])}</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap"><span style="font-size:11px;color:var(--text3);align-self:center">Gewusst?</span>${B(k,'sure','✅ ja','#16a34a')}${B(k,'shaky','〰️ teils','#ca8a04')}${B(k,'no','❌ nein','#dc2626')}</div>`
+      :`<button onclick="MR.show['${k}']=1;renderMicroRep()" style="font-size:12px;padding:5px 12px">👁 Antwort zeigen</button>`}
+    </div>`; }).join(''):MR.keys.map((k,i)=>`<div class="mr-lo">
       <div style="font-size:10px;color:var(--text3)">${loEsc(k)} · ${loEsc(loTitle(MR.id,k))}</div>
       <div style="font-size:12.5px;margin:3px 0 6px">${i+1}. ${loEsc(loText(MR.id,k))}</div>
       <div style="display:flex;gap:5px">${B(k,'sure','✅ sicher','#16a34a')}${B(k,'shaky','〰️ wackelig','#ca8a04')}${B(k,'no','❓ weiss nicht','#dc2626')}</div>
@@ -5399,11 +5413,16 @@ function finishMicroRep(){
   if(!MR) return;
   if(!S.loConf) S.loConf={};
   const tk=_keyOf(new Date());
-  Object.entries(MR.ans).forEach(([k,v])=>{ S.loConf[MR.id+'|'+k]={v,date:tk,t:Date.now()}; });
+  if(MR.cards){   // pro Lernziel zählt die schlechteste Bewertung der Karten
+    const W={no:0,shaky:1,sure:2}, byLo={};
+    Object.entries(MR.ans).forEach(([k,v])=>{ const lo=MR.cards[k][0]; if(!(lo in byLo)||W[v]<W[byLo[lo]]) byLo[lo]=v; });
+    Object.entries(byLo).forEach(([lo,v])=>{ S.loConf[MR.id+'|'+lo]={v,date:tk,t:Date.now()}; });
+    MR.loWeak=Object.entries(byLo).filter(([lo,v])=>v!=='sure').map(([lo])=>lo);
+  } else Object.entries(MR.ans).forEach(([k,v])=>{ S.loConf[MR.id+'|'+k]={v,date:tk,t:Date.now()}; });
   const mins=Math.max(1,Math.min(15,Math.round((Date.now()-MR.t0)/60000)||5));
   const st=ALL99.find(x=>x.id===MR.id);
-  const weak=MR.keys.filter(k=>MR.ans[k]!=='sure');
-  const id=MR.id; const sure=MR.keys.length-weak.length;
+  const weak=MR.cards?MR.loWeak:MR.keys.filter(k=>MR.ans[k]!=='sure');
+  const id=MR.id; const sure=MR.keys.filter(k=>MR.ans[k]==='sure').length;
   MR=null;
   document.getElementById('micro-modal')?.remove();
   _addTypedBlock(`⚡ Mikro-Rep: ${st?st.t:''} (${sure}/5 sicher)`,id,Math.max(5,mins),'rep');
