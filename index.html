@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v68</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v69</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v68</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v69</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2297,7 +2297,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=68;
+const APP_VERSION=69;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -5303,6 +5303,21 @@ function cardAbbrHTML(q,a){
   return `<details style="margin:-2px 0 8px"><summary style="font-size:11px;color:var(--text3);cursor:pointer">🔤 Abkürzungen (${out.length})</summary>
     <div style="font-size:11.5px;display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin-top:5px;padding:6px 10px;background:var(--bg3);border-radius:6px">${out.map(t=>`<b>${t}</b><span style="color:var(--text2)">${loEsc(G[t])}</span>`).join('')}</div></details>`;
 }
+// v69: Multiple-Choice-Karten (ECQB-Stil): Antwort antippen → richtig/falsch + Erklärung; richtig → „sicher“ (oder „geraten“), falsch → „nein“
+function mcqHTML(k,o){
+  const c=o.c, opts=c[3], ok=c[4], p=(MR.pick||{})[k];
+  const L='ABCD';
+  const btn=(t,i)=>{ let st='text-align:left;font-size:12.5px;padding:7px 10px;width:100%;display:flex;gap:8px;align-items:flex-start;';
+    if(p!=null){ if(i===ok) st+='background:rgba(22,163,74,.18);border-color:#16a34a;color:#86efac;'; else if(i===p) st+='background:rgba(220,38,38,.18);border-color:#dc2626;color:#fca5a5;'; else st+='opacity:.55;'; }
+    return `<button ${p!=null?'disabled':''} onclick="mcqPick('${k}',${i})" style="${st}"><b>${L[i]}</b><span>${loEsc(t)}</span></button>`; };
+  let h=`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px">${opts.map(btn).join('')}</div>`;
+  if(p!=null){
+    h+=`<div style="font-size:12.5px;background:var(--bg3);border-left:3px solid ${p===ok?'#16a34a':'#dc2626'};border-radius:6px;padding:8px 10px;margin-bottom:8px"><b>${p===ok?'✅ Richtig':'❌ Falsch – richtig ist '+L[ok]}</b><div style="margin-top:4px">${cardAnsHTML(c[2])}</div></div>${cardAbbrHTML(c[1]+' '+opts.join(' '),c[2])}`;
+    if(p===ok) h+=`<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:11px;color:var(--text3)">War es</span><button onclick="microAns('${k}','sure')" style="font-size:11px;padding:3px 9px;${MR.ans[k]==='sure'?'background:#16a34a;color:#fff;border-color:#16a34a':''}">✅ sicher gewusst</button><button onclick="microAns('${k}','shaky')" style="font-size:11px;padding:3px 9px;${MR.ans[k]==='shaky'?'background:#ca8a04;color:#fff;border-color:#ca8a04':''}">〰️ geraten</button></div>`;
+  }
+  return h;
+}
+function mcqPick(k,i){ if(!MR) return; MR.pick=MR.pick||{}; if(MR.pick[k]!=null) return; MR.pick[k]=i; const o=MR.cards[k]; MR.ans[k]=(i===o.c[4])?'sure':'no'; renderMicroRep(); }
 let MR=null;
 // v59: laufende Mikro-Rep überlebt App-Neustart/Wechsel (lokal pro Gerät), Pille zum Zurückkehren
 function _mrSave(){ try{ if(MR) localStorage.setItem('cpl_mr',JSON.stringify({at:Date.now(),MR:MR},(k,v)=>k==='due'?undefined:v)); else localStorage.removeItem('cpl_mr'); }catch(e){} }
@@ -5487,12 +5502,12 @@ function renderMicroRep(){
   ov.innerHTML=`<div class="modal-box" style="max-width:560px;max-height:88vh;overflow:auto">
     <div class="modal-title">⚡ Mikro-Rep (5 min)</div>
     <div style="font-size:13px;font-weight:600;margin-bottom:2px">${MR.mixed?'Gemischt aus '+new Set(Object.values(MR.cards||{}).map(o=>o.id)).size+' Stages':'#'+st.id+' '+st.t}${MR.cards?` <span style="font-weight:400;font-size:11px;color:var(--text3)">· ${cardsDueCount()} Wiederholungen fällig · ${cardsNewCount()} neu</span>`:''}</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${MR.cards?'Antwort erst im Kopf formulieren, dann aufdecken und ehrlich bewerten.':'Erklär dir jedes Lernziel kurz im Kopf — dann ehrlich einschätzen.'}</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${MR.cards?'Antwort wählen – danach siehst du die Erklärung.':'Erklär dir jedes Lernziel kurz im Kopf — dann ehrlich einschätzen.'}</div>
     ${MR.cards?MR.keys.map((k,i)=>{ const o=MR.cards[k], c=o.c; const tag=o.isNew?'🆕 neu':o.early?'⏩ vorzeitig':`⏰ fällig${o.over>0?' seit '+o.over+' T':''}${o.lapses?' · '+o.lapses+'× vergessen':''}`;
       return `<div class="mr-lo">
       <div style="font-size:10px;color:var(--text3)">#${o.id} · ${loEsc(loTitle(o.id,c[0]))} · ${tag}</div>
       <div style="font-size:13px;font-weight:600;margin:3px 0 8px">${i+1}. ${loEsc(c[1])}</div>
-      ${MR.show[k]?`<div style="font-size:12.5px;background:var(--bg3);border-left:3px solid var(--blue);border-radius:6px;padding:8px 10px;margin-bottom:8px">${cardAnsHTML(c[2])}</div>${cardAbbrHTML(c[1],c[2])}
+      ${c[3]?mcqHTML(k,o):MR.show[k]?`<div style="font-size:12.5px;background:var(--bg3);border-left:3px solid var(--blue);border-radius:6px;padding:8px 10px;margin-bottom:8px">${cardAnsHTML(c[2])}</div>${cardAbbrHTML(c[1],c[2])}
         <div style="display:flex;gap:5px;flex-wrap:wrap"><span style="font-size:11px;color:var(--text3);align-self:center">Gewusst?</span>${B(k,'sure','✅ ja','#16a34a')}${B(k,'shaky','〰️ teils','#ca8a04')}${B(k,'no','❌ nein','#dc2626')}</div>`
       :`<button onclick="MR.show['${k}']=1;renderMicroRep()" style="font-size:12px;padding:5px 12px">👁 Antwort zeigen</button>`}
     </div>`; }).join(''):MR.keys.map((k,i)=>`<div class="mr-lo">
