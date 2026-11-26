@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v53</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v54</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v53</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v54</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2296,7 +2296,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=53;
+const APP_VERSION=54;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -5704,7 +5704,11 @@ function saveExtraScore(id,afterTimer){
   const note=(document.getElementById('xs-note')?.value||'').trim();
   const mins=afterTimer?0:(document.getElementById('xs-book')?.checked?(parseInt(document.getElementById('xs-mins')?.value)||0):0);
   if(!S.repLog) S.repLog={}; if(!S.repLog[id]) S.repLog[id]=[];
-  S.repLog[id].push({date:_keyOf(new Date()),iv:0,score:sc==null||isNaN(sc)?null:Math.max(0,Math.min(100,Math.round(sc))),kind:'extra',t:Date.now()});
+  // v54: unter 75 % zählt auch ein Extra-Rep als durchgefallen → die nächste offene Rep (REP+1/+7/+30) wird als Wiederholung in 2 Tagen fällig
+  let _failIv=0;
+  if(sc!=null&&!isNaN(sc)&&Math.round(sc)<REP_PASS){ const _nx=getRepStatus(id).find(r=>r.status!=='done'); if(_nx) _failIv=_nx.iv; }
+  S.repLog[id].push({date:_keyOf(new Date()),iv:_failIv,score:sc==null||isNaN(sc)?null:Math.max(0,Math.min(100,Math.round(sc))),kind:'extra',t:Date.now()});
+  if(_failIv&&typeof loFlash==='function') loFlash(`${Math.round(sc)}% < ${REP_PASS}% → Wiederholung in 2 Tagen eingeplant`);
   if(note){ if(!S.log)S.log=[]; S.log.unshift({ts:new Date().toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'}),dt:todayStr(),sid:id,mode:'rep',txt:'🧠 Festigen: '+note,pb:1}); }
   document.getElementById('rep-score-modal')?.remove();
   if(mins>0){ const st=ALL99.find(x=>x.id===id); _addTypedBlock(`🧠 Festigen: ${st?st.t:''}${sc!=null&&!isNaN(sc)?' ('+Math.round(sc)+'%)':''}`,id,mins,'rep'); return; }
