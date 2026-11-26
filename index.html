@@ -501,11 +501,11 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v116</span></button>
+    <button class="mob-menu-btn" onclick="toggleMobMenu(event)" aria-label="Menü: Sync, Gerät verbinden, Session, Export">☰<span class="sync-dot loading" id="mob-sync-dot"></span><span style="font-size:10px;color:var(--text3)">v117</span></button>
     <div class="logo">✈️ CPL<span>Cockpit</span></div>
     <div class="tabs" id="tabs"></div>
     <div class="topbar-right">
-      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v116</span>
+      <span class="ver-badge" title="Installierte Cockpit-Version" style="font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:999px;padding:2px 8px">v117</span>
       <div class="sync-indicator" style="display:flex;align-items:center;gap:5px;padding:0 4px">
         <div class="sync-dot loading"></div>
         <span class="sync-txt" style="font-size:11px;color:var(--text2)">–</span>
@@ -2297,7 +2297,7 @@ async function saveSyncSetup(){
 }
 
 // v45: Versionsanzeige & Update-Hinweis
-const APP_VERSION=116;
+const APP_VERSION=117;
 function _verNum(t){ const m=String(t||'').match(/cpl-cockpit-v(\d+)/); return m?+m[1]:0; }
 async function checkForUpdate(){
   if(!/^https?:/.test(location.protocol)) return;
@@ -5458,8 +5458,8 @@ function _srUpdate(key,v,tk){
 function _cardPool(onlyId){
   const today=new Date(); today.setHours(0,0,0,0); const out=[];
   Object.entries(window.STAGE_CARDS||{}).forEach(([sid,cards])=>{
-    const id=+sid; if(onlyId&&id!==onlyId) return; if(!isDone(id)) return;
-    const base=repBaseDate(id)||today;
+    const id=+sid; if(onlyId&&id!==onlyId) return; const doneS=isDone(id); if(!doneS&&!onlyId) return;   // v117: aktuelles (noch offenes) Stage nur gezielt
+    const base=doneS?(repBaseDate(id)||today):_addDays(today,-1);
     cards.forEach(c=>{
       const key=_cardKey(id,c), st=(S.cardSR||{})[key];
       const due=st?_fromKey(st.d):_addDays(base,1);
@@ -5471,6 +5471,10 @@ function _cardPool(onlyId){
 }
 function cardsDueCount(){ return _cardPool(0).filter(o=>!o.isNew&&o.over>=0).length; }
 function cardsNewCount(){ return _cardPool(0).filter(o=>o.isNew&&o.over>=0).length; }
+// v117: Karten fürs aktuelle (noch nicht abgeschlossene) Stage — Pomodoro-Stage, sonst das nächste offene Stage mit Karten
+function curCardStage(){ const ok=id=>id&&!isDone(id)&&(window.STAGE_CARDS||{})[id]; if(ok(S.activeId)) return S.activeId; const s=ALL99.find(x=>ok(x.id)); return s?s.id:0; }
+function curCardStats(id){ const p=_cardPool(id); return {n:p.length,seen:p.filter(o=>!o.isNew).length,due:p.filter(o=>!o.isNew&&o.over>=0).length}; }
+function startCurrentStageCards(){ const id=curCardStage(); if(!id){ alert('Kein offenes Stage mit Karten gefunden.'); return; } startMicroRep(id); }
 function _pickCards(onlyId,n){
   let pool=_cardPool(onlyId); if(!pool.length) return [];
   const prio=o=>(o.isNew?0.5:o.over/Math.max(1,o.iv))+(o.lapses?0.3:0)+Math.random()*0.15;
@@ -5498,7 +5502,7 @@ function startMicroRep(stageId){
   if(sel.length>=3){
     const cnt={}; sel.forEach(o=>cnt[o.id]=(cnt[o.id]||0)+1);
     const main=+Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0][0];
-    MR={id:main,mixed:false,keys:sel.map(o=>o.k),cards:Object.fromEntries(sel.map(o=>[o.k,o])),show:{},ans:{},act:0,t0:Date.now()};
+    MR={id:main,mixed:false,cur:!isDone(main),keys:sel.map(o=>o.k),cards:Object.fromEntries(sel.map(o=>[o.k,o])),show:{},ans:{},act:0,t0:Date.now()};
     renderMicroRep(); return;
   }
   let id=stageId;
@@ -5532,7 +5536,7 @@ function renderMicroRep(){
   const B=(k,v,l,c)=>`<button onclick="microAns('${k}','${v}')" style="font-size:11px;padding:3px 9px;${MR.ans[k]===v?`background:${c};color:#fff;border-color:${c}`:''}">${l}</button>`;
   ov.innerHTML=`<div class="modal-box" style="max-width:560px;max-height:88vh;overflow:auto">
     <div class="modal-title">⚡ Mikro-Rep (5 min)</div>
-    <div style="font-size:13px;font-weight:600;margin-bottom:2px">${MR.mixed?'Mixed from '+new Set(Object.values(MR.cards||{}).map(o=>o.id)).size+' stages':'#'+st.id+' '+st.t}${MR.cards?` <span style="font-weight:400;font-size:11px;color:var(--text3)">· ${cardsDueCount()} reviews due · ${cardsNewCount()} new</span>`:''}</div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:2px">${MR.mixed?'Mixed from '+new Set(Object.values(MR.cards||{}).map(o=>o.id)).size+' stages':'#'+st.id+' '+st.t}${MR.cards?(MR.cur?(()=>{ const q=curCardStats(MR.id); return ` <span style="font-weight:400;font-size:11px;color:#facc15">· 📖 current stage · ${q.seen}/${q.n} cards seen</span>`; })():` <span style="font-weight:400;font-size:11px;color:var(--text3)">· ${cardsDueCount()} reviews due · ${cardsNewCount()} new</span>`):''}</div>
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${MR.cards?'Choose an answer – the explanation appears afterwards.':'Explain each learning objective to yourself, then rate honestly.'}</div>
     ${MR.cards?MR.keys.map((k,i)=>{ const o=MR.cards[k], c=o.c; const tag=o.isNew?'🆕 new':o.early?'⏩ early':`⏰ due${o.over>0?' for '+o.over+' d':''}${o.lapses?' · forgotten '+o.lapses+'×':''}`;
       return `<div class="mr-lo">
@@ -5549,6 +5553,7 @@ function renderMicroRep(){
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
       <button onclick="mrCancel()">Discard</button>
       <button onclick="mrHide()">⏸ Pause</button>
+      ${curCardStage()&&!(MR.cur&&MR.id===curCardStage())?'<button onclick="startCurrentStageCards()">📖 Current stage</button>':''}
       <button onclick="startMicroRep()">↻ Other stage</button>
       <button class="primary" ${done?'':'disabled style="opacity:.5"'} onclick="finishMicroRep()">✓ Done</button>
     </div></div>`;
@@ -5574,7 +5579,7 @@ function finishMicroRep(){
   const id=MR.id; const sure=MR.keys.filter(k=>MR.ans[k]==='sure').length;
   MR=null; _mrSave(); updMrPill();
   document.getElementById('micro-modal')?.remove();
-  _addTypedBlock(`⚡ Mikro-Rep: ${st?st.t:''} (${sure}/5 sicher · ${mins} min aktiv)`,id,mins,'rep');
+  _addTypedBlock(`⚡ Mikro-Rep: ${st?st.t:''} (${sure}/5 sicher · ${mins} min aktiv)`,id,mins,isDone(id)?'rep':'cards');
   showMicroResult(id,weak,sure);
 }
 function microQuizPrompt(id,weak){
@@ -5669,7 +5674,7 @@ function todayPlanHTML(withStats){
       <div style="font-size:14px;font-weight:700;flex:1">☀ Heute auf dem Plan</div>
       <span style="font-size:11px;color:${nDone>=2?'var(--green)':'var(--text3)'}">Wiederholung: ${nDone}/2 erledigt</span>
     </div>
-    ${r1}${r2}${(cdue||cnew)?row(false,'⚡','Karteikarten',cdue?`<b>${cdue}</b> Wiederholungen heute fällig (nach Vergessenskurve) · 5 Karten ≈ 3 Minuten`:`Keine Wiederholung fällig · ${cnew} neue Karten verfügbar`,`<button class="primary" style="${btn}" onclick="startMicroRep()">⚡ Mikro-Rep starten</button>`):''}${r3}
+    ${r1}${r2}${(()=>{ const cs=curCardStage(); if(!cs) return ''; const q=curCardStats(cs), st2=ALL99.find(x=>x.id===cs); return row(false,'📖','Aktuelles Stage #'+cs,`${loEsc(st2?st2.t:'')} · <b>${q.seen}/${q.n}</b> Karten geübt · ideal zum Festigen im Zug`,`<button class="primary" style="${btn}" onclick="startCurrentStageCards()">📖 Karten üben</button>`); })()}${(cdue||cnew)?row(false,'⚡','Karteikarten',cdue?`<b>${cdue}</b> Wiederholungen heute fällig (nach Vergessenskurve) · 5 Karten ≈ 3 Minuten`:`Keine Wiederholung fällig · ${cnew} neue Karten verfügbar`,`<button class="primary" style="${btn}" onclick="startMicroRep()">⚡ Mikro-Rep starten</button>`):''}${r3}
     ${withStats?`<div class="dtp-row" style="border-top:1px solid #2a2f45;padding-top:10px;margin-top:2px">
       <span class="card-label" style="margin:0">Heute</span>
       ${stat(A.learnH+'h','Lernzeit','var(--blue)')}${stat(A.stagesDone.length,'Stages fertig','var(--green)')}${stat(A.lo,'Lernziele','#2DD4BF')}${stat(A.focus,'Fokus-Blöcke','#F87171')}
@@ -6145,7 +6150,7 @@ function _addTypedBlock(label,sid,mins,type){
     ts:new Date().toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'})};
   if(!S.dayBlocks)S.dayBlocks=[];
   S.dayBlocks.unshift(blk);
-  if(sid&&(type==='pomo'||type==='rep')){S.hours[sid]=r((getH(sid))+h2);}
+  if(sid&&(type==='pomo'||type==='rep'||type==='cards')){S.hours[sid]=r((getH(sid))+h2);}
   saveState(); render();
 }
 
@@ -7954,6 +7959,7 @@ function renderRep(){
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
       <div class="sec" style="margin:0;flex:1">🚦 Fach-Ampel</div>
       <button onclick="showExtraRep()" style="font-size:12px;padding:5px 12px;background:#132a26;border-color:#1f5a4f;color:#2DD4BF" title="Freiwillige Extra-Rep für einen beliebigen Stage">🧠 Extra-Rep / Festigen</button>
+      ${curCardStage()?'<button onclick="startCurrentStageCards()" style="font-size:12px;padding:5px 12px;background:#102a1c;border-color:#1f6b45;color:#4ade80" title="Karteikarten für das Stage, das du gerade lernst">📖 Aktuelles Stage</button>':''}
       <button onclick="startMicroRep()" style="font-size:12px;padding:5px 12px;background:#2a2410;border-color:#6b5a1f;color:#FACC15" title="5 Lernziele schnell checken: sicher / wackelig / weiss nicht">⚡ Mikro-Rep (5 min)</button>
     </div>
     ${fachAmpelHTML()||'<div style="font-size:12px;color:var(--text3)">Noch keine Rep-Scores — nach den ersten Reps erscheint hier die Ampel.</div>'}
