@@ -1,6 +1,6 @@
 // CPL Cockpit Service Worker v48
 // Netzwerk zuerst (immer die neueste Version), bei Offline aus dem Cache.
-const CACHE='cpl-cockpit-v91';
+const CACHE='cpl-cockpit-v92';
 const FILES=['./','./index.html','./cards.js','./manifest.json','./icon-192.png','./icon-512.png','./icon-maskable-512.png'];
 self.addEventListener('install',e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate',e=>{ e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k))))); self.clients.claim(); });
